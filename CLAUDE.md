@@ -228,5 +228,6 @@ All user-facing routes get the user from the Supabase session and return `401` i
 ## Working with me
 
 - I'm new to Next.js. When you add or change a route, explain in a line or two what it does and how to test it in Postman.
-- We're on a ~36-hour clock. Build the weather forecast only after ingestion, stats, anomaly and bill all work. Get the ingestion path (`POST /api/readings` → Supabase → Realtime) working end to end before anything else.
+- We're on a ~36-hour clock. Build the weather forecast only after ingestion, stats, anomaly and bill all work.
+- `POST /api/readings` is live on Vercel. Until the hardware is ready, `npm run fake-device` (in `energy-monitor/`) stands in for the ESP32; use `-- --watts 2500` to simulate a spike. Real ESP32 integration happens last: keep 4–5 hours for it.
 - Ask before adding a new dependency or a new table.

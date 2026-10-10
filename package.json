@@ -9,7 +9,8 @@
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "node node_modules/eslint/bin/eslint.js",
     "create-device": "node --env-file=.env.local scripts/create-device.js",
-    "fake-device": "node --env-file=.env.local scripts/fake-device.js"
+    "fake-device": "node --env-file=.env.local scripts/fake-device.js",
+    "get-token": "node --env-file=.env.local scripts/get-token.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
