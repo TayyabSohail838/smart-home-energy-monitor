@@ -92,7 +92,7 @@ export default function ChatWidget() {
     <>
       {open && (
         <section
-          className="glass-strong fixed bottom-24 right-4 z-50 flex h-[min(600px,calc(100vh-8rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[28px] animate-fade-up"
+          className="glass-strong fixed bottom-[8.5rem] right-4 md:bottom-24 z-50 flex h-[min(600px,calc(100vh-11rem))] md:h-[min(600px,calc(100vh-8rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[28px] animate-fade-up"
           aria-label="Energy assistant"
         >
           <header className="flex items-center gap-3 border-b border-black/5 px-5 py-4">
@@ -197,7 +197,7 @@ export default function ChatWidget() {
 
       <button
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-5 right-4 z-50 flex items-center gap-2 rounded-full bg-ink px-5 py-3.5 text-sm font-medium text-white shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl"
+        className="fixed bottom-[4.5rem] right-4 z-50 md:bottom-5 flex items-center gap-2 rounded-full bg-ink px-5 py-3.5 text-sm font-medium text-white shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl"
         aria-expanded={open}
       >
         <span className="text-accent">{open ? "✕" : "⚡"}</span>
