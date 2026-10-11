@@ -49,7 +49,7 @@ app/
     stats/peak-hours/route.js# GET   - avg power per hour + top 3
     alerts/route.js          # GET   - user's alerts, newest first
     settings/route.js        # GET, PATCH - email_alerts on/off, alert_email
-    forecast/route.js        # GET   - 7-day + 3-month outlook, kWh/bill, suggestions
+    forecast/route.js        # GET   - ?months=1-12: 14-day weather + monthly outlook, kWh/bill, suggestions
 lib/
   supabase/server.js         # cookie-based client for user requests
   supabase/admin.js          # service-role client (server only)
@@ -168,9 +168,9 @@ User's alerts, newest first, limit 50: `{ alerts: [{ id, ts, type, message, powe
 
 `{ email_alerts, alert_email }`. PATCH accepts either or both fields. The row is created when the user links a device.
 
-### `GET /api/forecast`
+### `GET /api/forecast?months=1-12` (default 12)
 
-Returns `{ model, this_month: { month, projected_kwh, projected_bill, ac_kwh_est }, next_days: [{ date, weekday, temp_c, predicted_kwh }] (7), outlook: { headline, decreasing: [{ item, detail }], increasing: [{ item, detail }], months: [{ month, year, days, season, forecast_temp_c, likely_range_c, normal_temp_c, vs_normal_c, weather_source, sunset, daylight_h, predicted_kwh, ac_kwh_est, predicted_bill, predicted_slab, change_pct }] (3) }, weather_share_label, suggestions: [{ type, message }], excludes_taxes: true }`. `422` if fewer than 7 days of usage.
+Returns `{ model, this_month: { month, projected_kwh, projected_bill, ac_kwh_est }, next_days: [{ date, weekday, condition, icon, temp_max_c, temp_min_c, temp_mean_c, rain_chance_pct, rain_mm, wind_max_kmh, humidity_pct, sunrise, sunset, predicted_kwh }] (14), outlook: { headline, decreasing: [{ item, detail }], increasing: [{ item, detail }], months: [{ month, year, days, season, forecast_temp_c, likely_range_c, normal_temp_c, vs_normal_c, weather_basis: forecast|mixed|normals, weather_source, sunset, daylight_h, predicted_kwh, ac_kwh_est, predicted_bill, predicted_slab, change_pct }] }, year: { summary, total_kwh, total_bill, cheapest_month, most_expensive_month, ac_season_returns, ac_peak_month, weather_basis } | null (when months <= 3), weather_share_label, suggestions: [{ type, message }], excludes_taxes: true }`. `400` bad months, `422` if fewer than 7 days of usage.
 
 All user-facing routes get the user from the Supabase session and return `401` if there is none. They only ever read the user's own device.
 
@@ -192,12 +192,12 @@ All user-facing routes get the user from the Supabase session and return `401` i
 5. Energy charge only. Taxes, fuel adjustment and fixed charges are excluded, and the API response should say so (`excludes_taxes: true`).
 
 **Usage forecast (weather-based):**
-1. Weather comes from Open-Meteo (free, no API key, plain `fetch`, cached in memory). Recent past days + next 7 days: forecast API (`past_days`; the archive API lags ~5 days). Next 3 months: seasonal API (ECMWF, ~51 ensemble runs, 120 days). It predicts monthly tendencies, not exact daily weather; say so. Normals and sunset times: archive API, last 5 full years.
+1. Weather comes from Open-Meteo (free, no API key, plain `fetch`, cached in memory). Recent past days + next 14 days: forecast API (conditions from WMO weather codes, high/low, rain chance and mm, wind, humidity, sunrise/sunset; `past_days` because the archive API lags ~5 days). Next months: seasonal API (ECMWF, ~51 ensemble runs, max 217 days ≈ Nov–Apr from October). It predicts monthly tendencies, not exact daily weather; say so. Months beyond it use 5-year normals and are labelled `weather_basis: normals` (partly covered = `mixed`, no likely range). Normals and sunset times: archive API, last 5 full years.
 2. Cooling degrees `CDD = max(0, daily mean temp − 24°C)`.
 3. Fit `daily_kwh = a + b × CDD` with simple linear regression on the user's past days (plain JS, no library). `a` = base load, `b` = extra kWh per degree of heat (mostly AC). Report R².
-4. Each outlook month: average the ensemble's daily CDD → `predicted_kwh = days × (a + b × CDD)`, priced with `lib/bill.js`. `ac_kwh_est = days × b × CDD`. Likely range = 10th–90th percentile of the runs' monthly means. Season label from the forecast temperature.
-5. Outlook lists what goes down/up: AC (from `ac_kwh_est`), lighting (earlier/later sunset), heating (months below 17°C). Lighting and heating are described, not added to kWh: the model has no cold-day data to measure them.
-6. Suggestions are fixed if/then rules with templates (no LLM): rising/falling/steady usage, units per day to stay in a cheaper slab, hot/mild days ahead, LED lighting, winter heating.
+4. Each outlook month (default 12): average the ensemble's daily CDD (normal-basis days: average CDD over all past days of that month, not CDD of the average) → `predicted_kwh = days × (a + b × CDD)`, priced with `lib/bill.js`. `ac_kwh_est = days × b × CDD`. Likely range = 10th–90th percentile of the runs' monthly means. Season label from the forecast temperature.
+5. Headline and the down/up lists cover the next 3 months; `year` summarises all months (totals, cheapest/most expensive, when AC season returns and peaks). Outlook lists what goes down/up: AC (from `ac_kwh_est`), lighting (earlier/later sunset), heating (months below 17°C). Lighting and heating are described, not added to kWh: the model has no cold-day data to measure them.
+6. Suggestions are fixed if/then rules with templates (no LLM): rising/falling/steady usage, units per day to stay in a cheaper slab, hot/mild days ahead (daytime highs), likely thunderstorms, LED lighting, winter heating.
 7. The weather-driven part is an estimate, not measured AC use. Label it "weather-driven usage (est.)" in the API and UI.
 
 **Alerts:** insert into `alerts`, then email via Resend if `user_settings.email_alerts` is on. Set `emailed = true` on success. Email failure is logged, never thrown. Without a verified domain, `onboarding@resend.dev` only delivers to the Resend account's own email (inovixco@gmail.com). The slab warning check is throttled to once per 10 minutes per device; "once per slab per month" is enforced by the slab name in the alert message.
