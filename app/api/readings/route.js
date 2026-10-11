@@ -1,3 +1,4 @@
+import { checkAnomaly } from "@/lib/anomaly";
 import { verifyDevice } from "@/lib/deviceAuth";
 import { parseReadings } from "@/lib/readings";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -32,12 +33,15 @@ export async function POST(request) {
     }
   }
 
-  // Alert checks go here (Steps 11-12). They must never fail the insert.
-  try {
-    // await checkAnomaly(deviceId);
-    // await checkSlab(deviceId);
-  } catch (err) {
-    console.error("alert checks failed:", err);
+  // Alert checks. They must never fail the insert, so errors are only logged.
+  if (rows.length > 0) {
+    try {
+      const result = await checkAnomaly(deviceId);
+      if (result.anomaly) console.log("anomaly alert:", result.message);
+    } catch (err) {
+      console.error("anomaly check failed:", err);
+    }
+    // Slab warning check goes here (Step 12).
   }
 
   return Response.json({ ok: true, ...(skipped ? { skipped } : {}) }, { status: 201 });
