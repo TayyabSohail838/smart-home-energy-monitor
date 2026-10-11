@@ -19,11 +19,11 @@
 #define PZEM_RX_PIN 16  // ESP32 pin that receives from PZEM TX
 #define PZEM_TX_PIN 17  // ESP32 pin that sends to PZEM RX
 
-// TEST MODE: while the PZEM has no mains power (no reading), send a made-up 200-230 W
+// TEST MODE: while the PZEM has no mains power (no reading), send a made-up 30-65 W
 // value so the dashboard shows the ESP32 -> Wi-Fi -> server path working. Real PZEM
 // readings always win. Set to false before the real demo.
 #define TEST_MODE true
-const float TEST_MIN_W = 200, TEST_MAX_W = 230, TEST_VOLTS = 230;
+const float TEST_MIN_W = 30, TEST_MAX_W = 65, TEST_VOLTS = 230;  // like a laptop charging
 
 const uint32_t INTERVAL_MS = 10000;
 const int MAX_BACKLOG = 60;  // 10 minutes of readings kept while offline
