@@ -34,7 +34,7 @@ npm install
 npm run dev          # http://localhost:3000
 npm run build
 npm run lint
-node scripts/seed.js # writes 14 days of sample readings (see Seed data)
+npm run seed         # writes 30 days of sample readings (see Seed data)
 ```
 
 ## Folder structure
@@ -45,7 +45,7 @@ app/
     readings/route.js        # POST  - ESP32 ingestion (device key auth)
     devices/link/route.js    # POST  - link device to logged-in user
     stats/summary/route.js   # GET   - today/month kWh, bill, slab info
-    stats/history/route.js   # GET   - ?range=day|week|month
+    stats/history/route.js   # GET   - ?range=day|week|month|30d
     stats/peak-hours/route.js# GET   - avg power per hour + top 3
     alerts/route.js          # GET   - user's alerts, newest first
     forecast/route.js        # GET   - predicted kWh/bill + suggestions
@@ -149,9 +149,10 @@ Tariff rates are not hard-coded anywhere. They live in `tariff_slabs` and are fi
 
 Returns `{ today_kwh, month_kwh, bill_so_far, current_slab, units_to_next_slab, projected_month_kwh, projected_slab }`.
 
-### `GET /api/stats/history?range=day|week|month`
+### `GET /api/stats/history?range=day|week|month|30d`
 
-- `day`: kWh per hour for today. `week` / `month`: kWh per day.
+- `day`: kWh per hour for today. `week` (last 7 days), `month` (this calendar month), `30d` (last 30 days): kWh per day.
+- Grouping runs in the Postgres function `usage_history` (`supabase/stats.sql`).
 - Sum `energy_wh / 1000`; don't integrate power again.
 
 ### `GET /api/stats/peak-hours`
@@ -186,7 +187,7 @@ All user-facing routes get the user from the Supabase session and return `401` i
 5. Energy charge only. Taxes, fuel adjustment and fixed charges are excluded, and the API response should say so (`excludes_taxes: true`).
 
 **Usage forecast (weather-based):**
-1. Weather comes from Open-Meteo (free, no API key, plain `fetch`, cached ~1 hour). Next 7 days: forecast API. Past days: archive API. Next month: average temperature for that month over the last 5 years (a real month-ahead weather forecast doesn't exist; call it a climate average).
+1. Weather comes from Open-Meteo (free, no API key, plain `fetch`, cached ~1 hour). Next 7 days: forecast API. Recent past days: forecast API with `past_days` (the archive API lags ~5 days). Next month: average temperature for that month over the last 5 years (a real month-ahead weather forecast doesn't exist; call it a climate average).
 2. Cooling degrees `CDD = max(0, daily avg temp − 24°C)`.
 3. Fit `daily_kwh = a + b × CDD` with simple linear regression on the user's past days (plain JS, no library). `a` = base load, `b` = extra kWh per degree of heat (mostly AC).
 4. Predict next days and next month with the same formula; price next month with `lib/bill.js`.
@@ -204,10 +205,10 @@ All user-facing routes get the user from the Supabase session and return `401` i
 
 ## Seed data
 
-`scripts/seed.js` writes 14 days of readings at 10 s intervals for one demo device, `is_seeded = true`:
+`scripts/seed.js` writes 30 days of readings at 10 s intervals for one demo device, `is_seeded = true`:
 - Night low (fridge, fans), a morning bump, an evening peak (lights, AC, iron, TV).
 - Small random noise; weekends slightly higher.
-- AC load follows the real daily temperatures for those 14 days (Open-Meteo archive), so the forecast regression has a real pattern to learn.
+- AC load follows the real hourly temperatures for those days (Open-Meteo forecast API with `past_days`; the archive API lags ~5 days), so the forecast regression has a real pattern to learn.
 - 2–3 planted spikes so anomalies and graphs have something to show.
 - Insert in batches of about 1,000 rows.
 - Re-running it deletes old seeded rows first (`is_seeded = true` only, never real readings).

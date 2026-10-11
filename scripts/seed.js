@@ -1,4 +1,4 @@
-// Writes 14 days of simulated readings (one every 10 s) for one device, is_seeded = true.
+// Writes 30 days of simulated readings (one every 10 s) for one device, is_seeded = true.
 // AC load follows the real hourly Faisalabad temperatures for those days (Open-Meteo),
 // so the weather forecast has a real pattern to learn.
 // Re-running deletes old seeded rows first (never real readings).
@@ -6,7 +6,7 @@
 //        npm run seed -- <device_id>
 const { createClient } = require("@supabase/supabase-js");
 
-const DAYS = 14;
+const DAYS = 30;
 const STEP_S = 10;
 const VOLTAGE = 230;
 const BATCH = 1000;
@@ -28,6 +28,7 @@ const SPIKES = [
   { daysAgo: 3, hour: 15.25, minutes: 40, extraW: 2600 }, // afternoon: something big left on
   { daysAgo: 7, hour: 3.0, minutes: 35, extraW: 2200 },   // 3 am heater: clear anomaly
   { daysAgo: 11, hour: 11.5, minutes: 45, extraW: 2400 },
+  { daysAgo: 22, hour: 20.0, minutes: 30, extraW: 2500 },  // older spike, shows on the 30-day graph
 ];
 
 // Deterministic-ish noise source so re-runs look similar.
