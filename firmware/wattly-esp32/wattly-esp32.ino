@@ -19,6 +19,12 @@
 #define PZEM_RX_PIN 16  // ESP32 pin that receives from PZEM TX
 #define PZEM_TX_PIN 17  // ESP32 pin that sends to PZEM RX
 
+// TEST MODE: while the PZEM has no mains power (no reading), send a made-up 200-230 W
+// value so the dashboard shows the ESP32 -> Wi-Fi -> server path working. Real PZEM
+// readings always win. Set to false before the real demo.
+#define TEST_MODE true
+const float TEST_MIN_W = 200, TEST_MAX_W = 230, TEST_VOLTS = 230;
+
 const uint32_t INTERVAL_MS = 10000;
 const int MAX_BACKLOG = 60;  // 10 minutes of readings kept while offline
 const int MAX_BATCH = 30;    // readings per POST when catching up
@@ -119,13 +125,19 @@ void loop() {
 
     float current = pzem.current();
     float power = pzem.power();
+    bool test = false;
+    if ((isnan(current) || isnan(power)) && TEST_MODE) {
+      power = TEST_MIN_W + (TEST_MAX_W - TEST_MIN_W) * (esp_random() / 4294967295.0f);
+      current = power / TEST_VOLTS;
+      test = true;
+    }
     if (isnan(current) || isnan(power)) {
       Serial.println("PZEM: no reading (check wiring and that the PZEM has mains power)");
     } else if (!clockReady()) {
       Serial.println("Waiting for internet time before sending...");
     } else {
       Reading r = {time(nullptr), current, power, power * elapsedS / 3600.0f};
-      Serial.printf("%.3f A  %.1f W  %.4f Wh\n", r.current_a, r.power_w, r.energy_wh);
+      Serial.printf("%s%.3f A  %.1f W  %.4f Wh\n", test ? "TEST (no PZEM reading): " : "", r.current_a, r.power_w, r.energy_wh);
       addToBacklog(r);
     }
     // Catch up a few batches per cycle after an outage.
