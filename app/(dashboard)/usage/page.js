@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { PeakHoursChart, UsageBars } from "@/components/charts";
+import PeakClock from "@/components/meter/PeakClock";
+import StripChart, { rowLabel } from "@/components/meter/StripChart";
 import PageHeader from "@/components/PageHeader";
-import { AnimatedNumber, Card, ErrorNote, Skeleton, Stat, Tabs } from "@/components/ui";
-import { fmtDay, fmtNum, hourLabel } from "@/lib/format";
+import { Card, ErrorNote, Skeleton, Tabs } from "@/components/ui";
+import { fmtNum, hourLabel } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
+
+function Readout({ label, children }) {
+  return (
+    <p className="font-bill text-[11px] uppercase tracking-wide">
+      <span className="text-ink-soft">{label}</span> <span className="text-ink">{children}</span>
+    </p>
+  );
+}
 
 const RANGES = [
   { value: "day", label: "Today" },
@@ -18,13 +27,15 @@ export default function UsagePage() {
   const [range, setRange] = useState("week");
   const [showTable, setShowTable] = useState(false);
   const history = useApi(`/api/stats/history?range=${range}`, { refreshMs: 60_000 });
+  const summary = useApi("/api/stats/summary", { refreshMs: 60_000 });
   const peak = useApi("/api/stats/peak-hours");
 
   const h = history.data;
+  const rate = summary.data?.current_slab?.rate_per_unit;
   const filled = h ? h.points.filter((p) => p.kwh != null) : [];
   const busiest = filled.reduce((b, p) => (b == null || p.kwh > b.kwh ? p : b), null);
   const avg = filled.length ? h.total_kwh / filled.length : null;
-  const label = (p) => (h.unit === "hour" ? hourLabel(Number(p.bucket.slice(11, 13))) : fmtDay(p.bucket));
+  const rangeLabel = RANGES.find((r) => r.value === range).label;
 
   return (
     <>
@@ -33,69 +44,81 @@ export default function UsagePage() {
       </PageHeader>
       <ErrorNote message={history.error} onRetry={history.reload} />
 
-      <div className="grid gap-5 lg:grid-cols-4">
-        <Card delay={0}>
-          <Stat label={`Total · ${RANGES.find((r) => r.value === range).label}`}>
-            {h ? <><AnimatedNumber value={h.total_kwh} format={(n) => fmtNum(n, 1)} /> <span className="text-sm text-ink-3">kWh</span></> : <Skeleton className="h-7 w-24" />}
-          </Stat>
-        </Card>
-        <Card delay={40}>
-          <Stat label={`Average per ${h?.unit ?? "day"}`}>
-            {avg != null ? <><AnimatedNumber value={avg} format={(n) => fmtNum(n, 2)} /> <span className="text-sm text-ink-3">kWh</span></> : <Skeleton className="h-7 w-24" />}
-          </Stat>
-        </Card>
-        <Card delay={80}>
-          <Stat label={`Busiest ${h?.unit ?? "day"}`} hint={busiest ? `${fmtNum(busiest.kwh, 2)} kWh` : null}>
-            {busiest ? label(busiest) : <Skeleton className="h-7 w-24" />}
-          </Stat>
-        </Card>
-        <Card delay={120}>
-          <Stat label="Units = kWh" hint="1 unit on your bill = 1 kWh">
-            {h ? `${h.points.length} ${h.unit}s` : <Skeleton className="h-7 w-24" />}
-          </Stat>
-        </Card>
-
-        <Card
-          delay={160}
-          className="lg:col-span-4"
-          title={h?.unit === "hour" ? "Energy per hour" : "Energy per day"}
-          subtitle="Hover a bar for the exact value"
-          action={
-            <button onClick={() => setShowTable((v) => !v)} className="rounded-full bg-white/70 px-3 py-1 text-xs text-ink-2 ring-1 ring-black/5 hover:bg-white">
-              {showTable ? "Show chart" : "Show table"}
-            </button>
-          }
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3 border-b-2 border-dotted border-rule pb-3">
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          {h ? (
+            <>
+              <Readout label={`Total · ${rangeLabel}`}>{fmtNum(h.total_kwh, 1)} kWh</Readout>
+              <Readout label={`Avg / ${h.unit}`}>{avg != null ? `${fmtNum(avg, 2)} kWh` : "–"}</Readout>
+              <Readout label={`Busiest ${h.unit}`}>{busiest ? `${rowLabel(h.unit)(busiest.bucket)} · ${fmtNum(busiest.kwh, 2)} kWh` : "–"}</Readout>
+              <Readout label="Units">{h.points.length} {h.unit}s = kWh</Readout>
+            </>
+          ) : (
+            <span className="font-bill text-[11px] text-ink-soft">{" "}</span>
+          )}
+        </div>
+        <button
+          onClick={() => setShowTable((v) => !v)}
+          className="rounded-sm border border-ink/30 px-3 py-1 font-bill text-[11px] uppercase tracking-wide text-ink-soft hover:border-ink hover:text-ink"
         >
-          {!h ? (
-            <Skeleton className="h-[300px] w-full" />
-          ) : showTable ? (
-            <div className="max-h-[300px] overflow-auto rounded-2xl ring-1 ring-black/5">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white/90 text-left text-xs text-ink-3">
-                  <tr><th className="px-4 py-2 font-normal">{h.unit === "hour" ? "Hour" : "Day"}</th><th className="px-4 py-2 text-right font-normal">kWh</th></tr>
+          {showTable ? "Graph" : "Table"}
+        </button>
+      </div>
+
+      {!h ? (
+        <Skeleton className="h-[300px] w-full rounded-md" />
+      ) : (
+        <div key={range} className="animate-strip-feed">
+          {showTable ? (
+            <div className="max-h-[420px] overflow-auto rounded-md border border-ink/20">
+              <table className="w-full font-bill text-xs">
+                <thead className="sticky top-0 bg-paper-dark text-left uppercase tracking-wide text-ink-soft">
+                  <tr>
+                    <th className="px-4 py-2 font-normal">{h.unit === "hour" ? "Hour" : "Date"}</th>
+                    <th className="px-4 py-2 text-right font-normal">kWh</th>
+                    <th className="px-4 py-2 text-right font-normal">Est. Rs</th>
+                  </tr>
                 </thead>
                 <tbody>
-                  {h.points.map((p) => (
-                    <tr key={p.bucket} className="border-t border-black/5">
-                      <td className="px-4 py-2">{label(p)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{p.kwh == null ? "–" : fmtNum(p.kwh, 2)}</td>
+                  {h.points.map((p, i) => (
+                    <tr key={p.bucket} className={i % 2 === 1 ? "bg-black/[0.025]" : ""}>
+                      <td className="border-t border-dotted border-rule px-4 py-1.5">{rowLabel(h.unit)(p.bucket)}</td>
+                      <td className="border-t border-dotted border-rule px-4 py-1.5 text-right tabular-nums">
+                        {p.kwh == null ? "–" : fmtNum(p.kwh, 2)}
+                      </td>
+                      <td className="border-t border-dotted border-rule px-4 py-1.5 text-right tabular-nums">
+                        {p.kwh == null || rate == null ? "–" : `~${fmtNum(Math.round(p.kwh * rate))}`}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-4 border-double border-ink font-medium">
+                    <td className="px-4 py-2">Total</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{fmtNum(h.total_kwh, 2)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {rate != null ? `~${fmtNum(Math.round(h.total_kwh * rate))}` : "–"}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           ) : (
-            <div key={range} className="animate-fade-up">
-              <UsageBars points={h.points} unit={h.unit} height={300} />
-            </div>
+            <StripChart points={h.points} unit={h.unit} rate={rate} height={300} />
+          )}
+        </div>
+      )}
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-3">
+        <Card delay={0} className="lg:col-span-2" title="Peak hours" subtitle="Average power for each hour of the day · last 14 days">
+          {peak.data ? (
+            <PeakClock hours={peak.data.hours} topHours={peak.data.top_hours} message={peak.data.message} />
+          ) : (
+            <Skeleton className="h-[260px] w-full" />
           )}
         </Card>
 
-        <Card delay={200} className="lg:col-span-3" title="Peak hours" subtitle="Average power for each hour of the day · last 14 days">
-          {peak.data ? <PeakHoursChart hours={peak.data.hours} top={peak.data.top_hours} /> : <Skeleton className="h-[260px] w-full" />}
-        </Card>
-
-        <Card delay={240} title="What this means">
+        <Card delay={40} title="What this means">
           {peak.data ? (
             <>
               <p className="text-sm leading-relaxed text-ink-2">{peak.data.message}</p>

@@ -91,3 +91,79 @@ $$;
 
 revoke execute on function public.hourly_profile(uuid, int) from public, anon;
 grant execute on function public.hourly_profile(uuid, int) to authenticated, service_role;
+
+-- ---------- Live monitor (dashboard-design.md §4.1, §9) ----------
+-- Rolling window (now - span), not calendar-aligned, so "1h" always means the
+-- last 60 minutes. Peak and the window average come from the raw readings
+-- (one scalar subquery each, not per bucket), so "peak" keeps its real
+-- timestamp instead of snapping to a bucket edge; they're repeated on every
+-- row so a single rpc() call carries both the chart and the readouts.
+--   1h   -> 10s buckets (ESP32 cadence), ~360 points
+--   24h  -> 5-minute buckets, 288 points
+--   week -> 1-hour buckets, 168 points
+create or replace function public.stats_live(p_device_id uuid, p_range text)
+returns table (
+  bucket_ts timestamptz,
+  avg_power_w numeric,
+  peak_power_w numeric,
+  peak_ts timestamptz,
+  window_avg_power_w numeric
+)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  with bounds as (
+    select
+      now() as now_ts,
+      case p_range
+        when '1h' then interval '1 hour'
+        when '24h' then interval '24 hours'
+        when 'week' then interval '7 days'
+      end as span,
+      case p_range
+        when '1h' then interval '10 seconds'
+        when '24h' then interval '5 minutes'
+        when 'week' then interval '1 hour'
+      end as bucket
+  ),
+  window_rows as (
+    select r.ts, r.power_w
+    from public.readings r, bounds b
+    where r.device_id = p_device_id
+      and r.ts >= b.now_ts - b.span
+  ),
+  buckets as (
+    select generate_series(
+      date_bin(b.bucket, b.now_ts - b.span, 'epoch'::timestamptz),
+      date_bin(b.bucket, b.now_ts, 'epoch'::timestamptz),
+      b.bucket
+    ) as bucket_ts
+    from bounds b
+  ),
+  sums as (
+    select date_bin(b.bucket, w.ts, 'epoch'::timestamptz) as bucket_ts, avg(w.power_w::float8) as avg_w
+    from window_rows w, bounds b
+    group by 1
+  ),
+  agg as (
+    select
+      (select w.power_w from window_rows w order by w.power_w desc, w.ts desc limit 1) as peak_power_w,
+      (select w.ts from window_rows w order by w.power_w desc, w.ts desc limit 1) as peak_ts,
+      (select avg(w.power_w::float8) from window_rows w) as window_avg
+  )
+  select
+    bk.bucket_ts,
+    round(s.avg_w::numeric, 1),
+    round(a.peak_power_w::numeric, 1),
+    a.peak_ts,
+    round(a.window_avg::numeric, 1)
+  from buckets bk
+  left join sums s using (bucket_ts)
+  cross join agg a
+  order by bk.bucket_ts;
+$$;
+
+revoke execute on function public.stats_live(uuid, text) from public, anon;
+grant execute on function public.stats_live(uuid, text) to authenticated, service_role;

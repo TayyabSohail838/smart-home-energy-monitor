@@ -1,27 +1,47 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import AlertBanner from "@/components/AlertBanner";
-import { UsageBars } from "@/components/charts";
-import LivePanel from "@/components/LivePanel";
-import PageHeader from "@/components/PageHeader";
+import AlertTicker from "@/components/meter/AlertTicker";
+import BillSlip from "@/components/meter/BillSlip";
+import Monitor from "@/components/meter/Monitor";
+import Readouts from "@/components/meter/Readouts";
+import SlabDial from "@/components/meter/SlabDial";
+import StatusLights from "@/components/meter/StatusLights";
+import StripChart from "@/components/meter/StripChart";
+import UnitsCounter from "@/components/meter/UnitsCounter";
 import { useDevice } from "@/components/Shell";
-import SlabMeter from "@/components/SlabMeter";
-import { AnimatedNumber, Badge, Card, ErrorNote, Skeleton } from "@/components/ui";
-import { fmtNum, fmtRs, hourLabel, WEATHER_EMOJI } from "@/lib/format";
+import { ErrorNote } from "@/components/ui";
+import { fmtNum, hourLabel, WEATHER_EMOJI } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
+import { useNow } from "@/lib/useNow";
 
-function MetricCard({ label, value, format, unit, hint, delay }) {
+const PKT_OFFSET_MS = 5 * 3600 * 1000; // Asia/Karachi is UTC+5 all year
+const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// "Good evening · Sun 11 Oct" (dashboard-design.md §4.6), by Asia/Karachi time.
+function greeting(nowMs) {
+  if (!nowMs) return null;
+  const d = new Date(nowMs + PKT_OFFSET_MS);
+  const hour = d.getUTCHours();
+  const phase = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : hour < 21 ? "Good evening" : "Good night";
+  return `${phase} · ${WEEKDAY[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH[d.getUTCMonth()]}`;
+}
+
+// A small bordered panel for content below the §4 layout proper (today-by-hour,
+// peak hours, next days) - kept from the pre-reskin page rather than dropped,
+// just restyled to the paper surface instead of a glass Card.
+function Panel({ title, action, children }) {
   return (
-    <Card delay={delay}>
-      <p className="text-xs text-ink-3">{label}</p>
-      <p className="mt-2 text-3xl font-medium tracking-tight">
-        {value == null ? <Skeleton className="h-9 w-28" /> : <AnimatedNumber value={value} format={format} />}
-        {unit && value != null && <span className="ml-1 text-base text-ink-3">{unit}</span>}
-      </p>
-      {hint && <p className="mt-1 text-xs text-ink-3">{hint}</p>}
-    </Card>
+    <div className="rounded-md border border-ink/15 p-4">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <p className="font-bill text-[11px] uppercase tracking-wide text-ink-soft">{title}</p>
+        {action}
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -31,9 +51,11 @@ export default function OverviewPage() {
   const today = useApi("/api/stats/history?range=day", { refreshMs: 60_000 });
   const alerts = useApi("/api/alerts", { refreshMs: 30_000 });
   const peak = useApi("/api/stats/peak-hours");
-  const forecast = useApi("/api/forecast?months=3");
+  const forecast = useApi("/api/forecast?months=1", { refreshMs: 10 * 60_000 });
+  const now = useNow(30_000);
+  const [monitorStats, setMonitorStats] = useState({ now: null, peak: null, avg: null, lastReadingTs: null });
 
-  // A new live reading changes today's numbers: refresh them, at most every 20 s.
+  // A new live reading changes this month's (and today's) numbers: refresh at most every 20 s.
   const lastRefresh = useRef(0);
   const { reload: reloadSummary } = summary;
   const { reload: reloadToday } = today;
@@ -47,101 +69,103 @@ export default function OverviewPage() {
   }, [reloadSummary, reloadToday, reloadAlerts]);
 
   const s = summary.data;
-  const slabRange = (slab) => (slab.max_units === null ? `${slab.min_units}+` : `${slab.min_units}–${slab.max_units}`);
-  const nextSlabNote =
-    s && s.units_to_next_slab != null && s.next_slab
-      ? `${fmtNum(s.units_to_next_slab)} units until slab ${slabRange(s.next_slab)}`
-      : "Top slab";
+  const todayStartMs = now ? new Date(now + PKT_OFFSET_MS).setUTCHours(0, 0, 0, 0) - PKT_OFFSET_MS : null;
+  const spikesToday = alerts.data
+    ? alerts.data.alerts.filter((a) => a.type === "anomaly" && todayStartMs != null && Date.parse(a.ts) >= todayStartMs)
+    : null;
 
   return (
     <>
-      <PageHeader title="Good to see you" subtitle={`${device.name} · live electricity use, bill and alerts`} />
+      <AlertTicker deviceId={device.id} />
       <AlertBanner alerts={alerts.data?.alerts} />
       <ErrorNote message={summary.error} onRetry={summary.reload} />
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <LivePanel deviceId={device.id} onReading={onReading} />
+      <div className="mb-5">
+        <p className="font-display text-[32px] font-black uppercase leading-none text-ink">{greeting(now) ?? " "}</p>
+        <p className="mt-1 font-bill text-xs text-ink-soft">{device.name}</p>
+      </div>
 
-        <Card delay={120} title="Bill so far" subtitle="Energy charge only · excl. taxes & FPA">
-          <p className="text-4xl font-medium tracking-tight">
-            {s ? <AnimatedNumber value={s.bill_so_far} format={fmtRs} /> : <Skeleton className="h-10 w-36" />}
-          </p>
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-ink-3">Month-end estimate</p>
-              <p className="mt-1 text-lg font-medium">{s ? fmtRs(s.projected_bill) : "…"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-ink-3">Rate now</p>
-              <p className="mt-1 text-lg font-medium">{s ? `Rs ${s.current_slab.rate_per_unit}` : "…"}<span className="text-xs text-ink-3"> /unit</span></p>
-            </div>
-          </div>
-          {s && s.projected_slab.min_units > s.current_slab.min_units && (
-            <div className="mt-4">
-              <Badge status="warning">Heading for slab {slabRange(s.projected_slab)}</Badge>
-            </div>
-          )}
-        </Card>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="order-2 min-w-0 flex-1 lg:order-1">
+          <Monitor deviceId={device.id} alerts={alerts.data?.alerts} onReading={onReading} onStats={setMonitorStats} />
+        </div>
+        <div className="order-1 lg:order-2 lg:w-60 lg:shrink-0">
+          <StatusLights
+            lastReadingTs={monitorStats.lastReadingTs}
+            summary={s}
+            spikesToday={spikesToday}
+            weatherDay={forecast.data?.next_days?.[0]}
+          />
+        </div>
+      </div>
 
-        <MetricCard delay={160} label="Today" value={s?.today_kwh} format={(n) => fmtNum(n, 2)} unit="kWh" hint="Since midnight (Pakistan time)" />
-        <MetricCard delay={200} label="This month" value={s?.month_kwh} format={(n) => fmtNum(n, 1)} unit="kWh" hint={s ? `Day ${Math.ceil(s.days_passed)} of ${s.days_in_month}` : null} />
-        <MetricCard delay={240} label="Projected month" value={s?.projected_month_kwh} format={(n) => fmtNum(n)} unit="units" hint={nextSlabNote} />
+      <Readouts now={monitorStats.now} peak={monitorStats.peak} avg={monitorStats.avg} todayKwh={s?.today_kwh} />
 
-        <Card delay={280} className="lg:col-span-2" title="Tariff slab" subtitle="NEPRA 2026 unprotected · all units billed at your slab's rate">
-          {s ? <SlabMeter used={s.month_kwh} projected={s.projected_month_kwh} currentSlabId={s.current_slab.id} /> : <Skeleton className="h-16 w-full" />}
-        </Card>
+      <div className="mt-6 grid gap-6 sm:grid-cols-2">
+        <UnitsCounter value={s?.month_kwh} projected={s?.projected_month_kwh} />
 
-        <Card
-          delay={320}
-          title="Next days"
-          subtitle="Weather and predicted use"
-          action={<Link href="/forecast" className="text-xs text-ink-2 hover:text-ink">Forecast →</Link>}
-        >
-          {forecast.data ? (
-            <>
-              <p className="text-sm leading-relaxed text-ink-2">{forecast.data.outlook.headline.split(". ")[0]}.</p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {forecast.data.next_days.slice(0, 3).map((d) => (
-                  <div key={d.date} className="rounded-2xl bg-white/70 p-3 text-center ring-1 ring-black/5">
-                    <p className="text-xs text-ink-3">{d.weekday}</p>
-                    <p className="my-1 text-2xl" aria-label={d.condition}>{WEATHER_EMOJI[d.icon]}</p>
-                    <p className="text-sm font-medium">{Math.round(d.temp_max_c)}° <span className="text-ink-3">{Math.round(d.temp_min_c)}°</span></p>
-                    <p className="text-[11px] text-ink-3">{fmtNum(d.predicted_kwh, 1)} kWh</p>
-                  </div>
-                ))}
-              </div>
-            </>
+        <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+          <SlabDial
+            used={s?.month_kwh}
+            projected={s?.projected_month_kwh}
+            currentSlab={s?.current_slab}
+            nextSlab={s?.next_slab}
+            unitsToNextSlab={s?.units_to_next_slab}
+            projectedSlab={s?.projected_slab}
+          />
+          <BillSlip
+            billSoFar={s?.bill_so_far}
+            projectedBill={s?.projected_bill}
+            slabMode={s?.slab_mode}
+            rate={s?.current_slab?.rate_per_unit}
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <Panel title="Today by hour" action={<p className="font-bill text-[11px] text-ink-soft">{today.data ? `${fmtNum(today.data.total_kwh, 2)} kWh so far` : ""}</p>}>
+          {today.data ? (
+            <StripChart points={today.data.points} unit="hour" rate={s?.current_slab?.rate_per_unit} height={200} />
           ) : (
-            <Skeleton className="h-32 w-full" />
+            <div className="skeleton h-[200px] w-full rounded-md" />
           )}
-        </Card>
+        </Panel>
 
-        <Card
-          delay={360}
-          className="lg:col-span-2"
-          title="Today by hour"
-          subtitle={today.data ? `${fmtNum(today.data.total_kwh, 2)} kWh so far` : " "}
-          action={<Link href="/usage" className="text-xs text-ink-2 hover:text-ink">More graphs →</Link>}
-        >
-          {today.data ? <UsageBars points={today.data.points} unit="hour" height={200} /> : <Skeleton className="h-[200px] w-full" />}
-        </Card>
-
-        <Card delay={400} title="Peak hours" subtitle="Last 14 days">
+        <Panel title="Peak hours · last 14 days">
           {peak.data ? (
             <>
               <div className="flex flex-wrap gap-2">
-                {[...peak.data.top_hours].sort((a, b) => a - b).map((h) => (
-                  <span key={h} className="rounded-full bg-ink px-3 py-1 text-xs text-white">
-                    {hourLabel(h)} – {hourLabel(h + 1)}
+                {[...peak.data.top_hours].sort((a, b) => a - b).map((hh) => (
+                  <span key={hh} className="rounded-sm bg-ink px-2.5 py-1 font-bill text-[11px] text-paper">
+                    {hourLabel(hh)} – {hourLabel(hh + 1)}
                   </span>
                 ))}
               </div>
-              <p className="mt-4 text-sm leading-relaxed text-ink-2">{peak.data.message}</p>
+              <p className="mt-3 text-sm leading-relaxed text-ink-soft">{peak.data.message}</p>
             </>
           ) : (
-            <Skeleton className="h-24 w-full" />
+            <div className="skeleton h-24 w-full rounded-md" />
           )}
-        </Card>
+        </Panel>
+
+        <Panel title="Next days" action={<Link href="/forecast" className="font-bill text-[11px] text-ink-soft hover:text-ink">Forecast →</Link>}>
+          {forecast.data ? (
+            <div className="grid grid-cols-3 gap-2">
+              {forecast.data.next_days.slice(0, 3).map((d) => (
+                <div key={d.date} className="rounded-sm bg-paper-dark p-3 text-center">
+                  <p className="font-bill text-[10px] text-ink-soft">{d.weekday}</p>
+                  <p className="my-1 text-2xl" aria-label={d.condition}>{WEATHER_EMOJI[d.icon]}</p>
+                  <p className="font-bill text-sm">
+                    {Math.round(d.temp_max_c)}° <span className="text-ink-soft">{Math.round(d.temp_min_c)}°</span>
+                  </p>
+                  <p className="font-bill text-[10px] text-ink-soft">{fmtNum(d.predicted_kwh, 1)} kWh</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="skeleton h-28 w-full rounded-md" />
+          )}
+        </Panel>
       </div>
     </>
   );

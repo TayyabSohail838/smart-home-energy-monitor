@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Stamp from "@/components/auth/Stamp";
+import Logbook from "@/components/meter/Logbook";
+import WallSwitch from "@/components/meter/WallSwitch";
 import PageHeader from "@/components/PageHeader";
-import { Badge, Card, ErrorNote, Skeleton, Tabs, Toggle } from "@/components/ui";
-import { fmtDateTime, fmtNum, timeAgo } from "@/lib/format";
+import { Badge, Card, ErrorNote, Skeleton, Tabs } from "@/components/ui";
 import { useApi } from "@/lib/useApi";
 
 const FILTERS = [
@@ -12,17 +14,20 @@ const FILTERS = [
   { value: "slab_warning", label: "Slab warnings" },
 ];
 
+// Settings panel (dashboard-design.md §7.1): the wall switch + alert email,
+// at the top of the page so BreakerNav's "/alerts#settings" link lands on it.
 function EmailSettings() {
   const settings = useApi("/api/settings");
   const [edited, setEdited] = useState(null); // local edits; falls back to the loaded settings
   const form = edited ?? settings.data;
   const setForm = setEdited;
   const [saving, setSaving] = useState(false);
-  const [note, setNote] = useState(null);
+  const [error, setError] = useState(null);
+  const [saveCount, setSaveCount] = useState(0);
 
   async function save(changes) {
     setSaving(true);
-    setNote(null);
+    setError(null);
     try {
       const res = await fetch("/api/settings", {
         method: "PATCH",
@@ -31,53 +36,66 @@ function EmailSettings() {
       });
       // A 500 can come back as an HTML error page, so don't assume JSON.
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) return setNote({ ok: false, text: body.error ?? `Could not save (${res.status})` });
+      if (!res.ok) return setError(body.error ?? `Could not save (${res.status})`);
       setForm(body);
-      setNote({ ok: true, text: "Saved" });
+      setSaveCount((c) => c + 1);
     } catch {
-      setNote({ ok: false, text: "Could not reach the server. Check your connection and try again." });
+      setError("Could not reach the server. Check your connection and try again.");
     } finally {
-      // Always re-enable the form, or the toggle and Save button stay dead.
+      // Always re-enable the form, or the switch and Save button stay dead.
       setSaving(false);
     }
   }
 
   return (
-    <Card delay={60} title="Email alerts" subtitle="Sent through Resend when an alert fires">
+    <div id="settings" className="rounded-md border border-ink/15 p-5">
+      <p className="mb-4 font-bill text-[11px] uppercase tracking-wide text-ink-soft">
+        Email alerts · sent through Resend when an alert fires
+      </p>
       {!form ? (
         <Skeleton className="h-28 w-full" />
       ) : (
-        <div className="space-y-5">
-          <label className="flex items-center justify-between gap-4">
-            <span className="text-sm text-ink-2">Email me about alerts</span>
-            <Toggle checked={form.email_alerts} disabled={saving} label="Email alerts" onChange={(v) => save({ email_alerts: v })} />
-          </label>
+        <div className="flex flex-wrap items-start gap-8">
+          <WallSwitch checked={form.email_alerts} disabled={saving} label="Email alerts" onChange={(v) => save({ email_alerts: v })} />
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
               save({ alert_email: form.alert_email });
             }}
+            className="flex min-w-[220px] flex-1 items-end gap-2"
           >
-            <span className="text-xs text-ink-3">Send to</span>
-            <div className="mt-1 flex gap-2">
+            <div className="min-w-0 flex-1">
+              <span className="font-bill text-[10px] uppercase tracking-wide text-ink-soft">Send to</span>
               <input
                 type="email"
                 value={form.alert_email ?? ""}
                 onChange={(e) => setForm({ ...form, alert_email: e.target.value })}
-                className="min-w-0 flex-1 rounded-2xl bg-white/80 px-3 py-2 text-sm outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-ink/30"
+                className="mt-1 w-full rounded-sm border border-ink/30 bg-paper px-3 py-2 font-bill text-sm text-ink outline-none focus:border-ink"
               />
-              <button disabled={saving} className="rounded-2xl bg-ink px-4 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50">
-                Save
-              </button>
             </div>
+            <button
+              disabled={saving}
+              className="rounded-sm border border-ink bg-ink px-4 py-2 font-bill text-xs uppercase tracking-wide text-paper transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              Save
+            </button>
           </form>
-          {note && <p className={`text-xs ${note.ok ? "text-[#006300]" : "text-[var(--critical)]"}`}>{note.ok ? "✓" : "⚠"} {note.text}</p>}
-          <p className="text-xs leading-relaxed text-ink-3">
-            Demo setup: without a verified domain, Resend only delivers to the email that owns the Resend account.
-          </p>
+
+          <div className="flex items-center gap-3">
+            {saveCount > 0 && !error && (
+              <Stamp key={saveCount} tone="green" className="text-[10px]">
+                Saved
+              </Stamp>
+            )}
+            {error && <p className="text-sm text-[var(--stamp-red)]">⚠ {error}</p>}
+          </div>
         </div>
       )}
-    </Card>
+      <p className="mt-4 text-xs leading-relaxed text-ink-soft">
+        Demo setup: without a verified domain, Resend only delivers to the email that owns the Resend account.
+      </p>
+    </div>
   );
 }
 
@@ -94,56 +112,35 @@ export default function AlertsPage() {
       </PageHeader>
       <ErrorNote message={alerts.error} onRetry={alerts.reload} />
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Card delay={0} className="lg:col-span-2" title={`${list.length} alert${list.length === 1 ? "" : "s"}`} subtitle={`${counts.anomaly ?? 0} unusual usage · ${counts.slab_warning ?? 0} slab warnings · updates every 20 s`}>
+      <EmailSettings />
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <p className="mb-3 font-bill text-[11px] uppercase tracking-wide text-ink-soft">
+            {list.length} alert{list.length === 1 ? "" : "s"} · {counts.anomaly ?? 0} unusual usage · {counts.slab_warning ?? 0} slab warnings · updates every 20s
+          </p>
           {!alerts.data ? (
             <div className="space-y-3">
               <Skeleton className="h-20 w-full" />
               <Skeleton className="h-20 w-full" />
             </div>
-          ) : list.length === 0 ? (
-            <div className="grid place-items-center rounded-2xl border border-dashed border-black/10 py-14 text-center text-sm text-ink-3">
-              <p className="text-3xl">✓</p>
-              <p className="mt-2">No alerts. Usage looks normal.</p>
-              <p className="mt-1 text-xs">Try <code className="rounded bg-black/5 px-1">npm run fake-device -- --watts 3000</code> for a few minutes.</p>
-            </div>
           ) : (
-            <ol className="relative space-y-3 border-l border-black/10 pl-5">
-              {list.map((a, i) => {
-                const anomaly = a.type === "anomaly";
-                return (
-                  <li key={a.id} className="animate-fade-up relative" style={{ animationDelay: `${i * 40}ms` }}>
-                    <span
-                      className="absolute -left-[27px] top-4 h-3 w-3 rounded-full ring-4 ring-[var(--page)]"
-                      style={{ background: anomaly ? "var(--critical)" : "var(--warning)" }}
-                    />
-                    <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-black/5 transition-colors hover:bg-white">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge status={anomaly ? "critical" : "warning"}>{anomaly ? "Unusual usage" : "Slab warning"}</Badge>
-                        {a.power_w != null && <span className="text-xs text-ink-2">{fmtNum(a.power_w)} W</span>}
-                        <span className="ml-auto text-xs text-ink-3" title={fmtDateTime(a.ts)}>{timeAgo(a.ts)}</span>
-                      </div>
-                      <p className="mt-2 text-sm leading-relaxed text-ink-2">{a.message}</p>
-                      <p className="mt-2 text-xs text-ink-3">
-                        {fmtDateTime(a.ts)} · {a.emailed ? "✉ Emailed" : "Not emailed"}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
+            <Logbook alerts={list} />
           )}
-        </Card>
-
-        <div className="space-y-5">
-          <EmailSettings />
-          <Card delay={120} title="How alerts work" hover={false}>
-            <ul className="space-y-3 text-sm text-ink-2">
-              <li><Badge status="critical">Unusual usage</Badge><p className="mt-1">The last 5 minutes are far above what your home normally uses at this hour (μ + 3σ and 300 W more). At most one every 30 minutes.</p></li>
-              <li><Badge status="warning">Slab warning</Badge><p className="mt-1">This month&apos;s projection lands in a more expensive slab. Once per slab per month.</p></li>
-            </ul>
-          </Card>
         </div>
+
+        <Card delay={120} title="How alerts work" hover={false}>
+          <ul className="space-y-3 text-sm text-ink-2">
+            <li>
+              <Badge status="critical">Unusual usage</Badge>
+              <p className="mt-1">The last 5 minutes are far above what your home normally uses at this hour (μ + 3σ and 300 W more). At most one every 30 minutes.</p>
+            </li>
+            <li>
+              <Badge status="warning">Slab warning</Badge>
+              <p className="mt-1">This month&apos;s projection lands in a more expensive slab. Once per slab per month.</p>
+            </li>
+          </ul>
+        </Card>
       </div>
     </>
   );

@@ -9,8 +9,9 @@ import { useEffect, useState } from "react";
 // `delay` defers it, matching BillCard's own sequencing pattern.
 //
 // `tone` picks the border/text colour: "red" (warnings, the default), "green"
-// (success, e.g. "CONNECTED"), or "ink" (neutral). `faint` fades it further
-// than .stamp's own 0.85 baseline, for the "RECEIVED" stamp — an inline style,
+// (success, e.g. "CONNECTED"), "ink" (neutral), or "blue" (the forecast page's
+// STORM advisory, dashboard-design.md §6.4). `faint` fades it further than
+// .stamp's own 0.85 baseline, for the "RECEIVED" stamp — an inline style,
 // not an opacity-* class: .stamp's opacity rule is defined after Tailwind's
 // utilities in globals.css and would win that cascade fight regardless of
 // class order (the same trap caught in the landing page's Slip.js).
@@ -29,7 +30,7 @@ export default function Stamp({ children, tone = "red", delay = 0, faint = false
 
   if (!shown) return null;
 
-  const toneClass = tone === "green" ? "stamp-ok" : tone === "ink" ? "stamp-ink" : "";
+  const toneClass = tone === "green" ? "stamp-ok" : tone === "ink" ? "stamp-ink" : tone === "blue" ? "stamp-blue" : "";
   return (
     <span className={`stamp stamp-in ${toneClass} ${className}`} style={faint ? { opacity: 0.4 } : undefined}>
       {children}

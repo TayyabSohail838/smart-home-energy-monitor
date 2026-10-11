@@ -208,13 +208,6 @@ User's alerts, newest first, limit 50: `{ alerts: [{ id, ts, type, message, powe
 
 Returns `{ model, this_month: { month, projected_kwh, projected_bill, ac_kwh_est }, next_days: [{ date, weekday, condition, icon, temp_max_c, temp_min_c, temp_mean_c, rain_chance_pct, rain_mm, wind_max_kmh, humidity_pct, sunrise, sunset, predicted_kwh }] (14), outlook: { headline, decreasing: [{ item, detail }], increasing: [{ item, detail }], months: [{ month, year, days, season, forecast_temp_c, likely_range_c, avg_high_c, avg_low_c, rain_mm, rainy_days, normal_temp_c, vs_normal_c, trend_adjustment_c, weather_basis: forecast|mixed|normals, weather_source, sunset, daylight_h, predicted_kwh, ac_kwh_est, predicted_bill, predicted_slab, change_pct }] }, year: { summary, total_kwh, total_bill, cheapest_month, most_expensive_month, ac_season_returns, ac_peak_month, hottest_month, coldest_month, wettest_month, weather_basis: { seasonal_forecast, mostly_normals, warming_trend } } | null (when months <= 3), weather_share_label, suggestions: [{ type, message }], excludes_taxes: true }`. `400` bad months, `422` if fewer than 7 days of usage. `change_pct` is `null` when no usage is recorded for the current calendar month yet (nothing to compare against); the UI and the suggestion rules both handle that case.
 
-### `POST /api/chat` (logged-in user)
-
-- Body: `{ messages: [{ role: "user" | "assistant", text }] }`, last one from the user; max 20 messages, 2,000 chars each. Returns `{ reply, tools_used }`.
-- Gemini `generateContent` via plain `fetch` (no SDK), key in `x-goog-api-key`. Tools: `get_live_power`, `get_summary`, `get_usage_history`, `get_peak_hours`, `get_alerts`, `get_forecast` - they call the same `lib/` functions as the dashboard with the user's Supabase client (RLS). Up to 5 tool rounds per question; within a turn the model's content is sent back unchanged (Gemini 3 thought signatures).
-- 30 messages per user per hour (in memory, per server instance). `503` no key, `429` limit or Gemini quota, `502` other Gemini errors. Chat history lives in the browser (localStorage), no table.
-- System prompt rules: numbers only from tools, reply in the user's language (English / Urdu / Roman Urdu), energy charge only, never suggest opening the meter, stay on topic.
-
 All user-facing routes get the user from the Supabase session and return `401` if there is none. They only ever read the user's own device.
 
 ## Analytics rules
