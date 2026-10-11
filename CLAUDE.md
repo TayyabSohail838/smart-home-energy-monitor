@@ -6,15 +6,15 @@ The full design lives in the "Smart Home Energy Monitor: System Architecture" do
 
 ## Scope
 
-**Build:** reading ingestion, device linking, stats (summary, history, peak hours), anomaly detection, slab-based bill estimate, alerts (stored + emailed), seed script, weather-based usage forecast + suggestions (built last, first to cut).
+**Build:** reading ingestion, device linking, stats (summary, history, peak hours), anomaly detection, slab-based bill estimate, alerts (stored + emailed), seed script, weather-based usage forecast + suggestions, dashboard chatbot (Gemini, answers from the user's own data via tools).
 
-**Do not build:** ML models or trained datasets, LLM tips, appliance detection (NILM), manual appliance entry, voltage tracking, multiple devices per user, per-user location. These are roadmap or dropped. Don't add them, even partially.
+**Do not build:** ML models or trained datasets, LLM features other than the chatbot, appliance detection (NILM), manual appliance entry, voltage tracking, multiple devices per user, per-user location. These are roadmap or dropped. Don't add them, even partially.
 
 Time is the main constraint. Prefer the simplest thing that works and is easy to explain to judges.
 
 ## Build status
 
-Done: ingestion (`POST /api/readings`, deployed on Vercel), login + device linking, 30-day seed, history, peak hours, slab bill + summary, anomaly detection, alerts + email (Resend), settings, weather forecast (14 days + 12 months), dashboard UI.
+Done: ingestion (`POST /api/readings`, deployed on Vercel), login + device linking, 30-day seed, history, peak hours, slab bill + summary, anomaly detection, alerts + email (Resend), settings, weather forecast (14 days + 12 months), dashboard UI, chatbot code (needs `GEMINI_API_KEY`).
 
 Remaining:
 1. Hardware integration: real ESP32 → deployed API (keep 4–5 hours; until then `npm run fake-device`).
@@ -59,6 +59,7 @@ app/
     alerts/route.js          # GET   - user's alerts, newest first
     settings/route.js        # GET, PATCH - email_alerts on/off, alert_email
     forecast/route.js        # GET   - ?months=1-12: 14-day weather + monthly outlook, kWh/bill, suggestions
+    chat/route.js            # POST  - dashboard chatbot (Gemini + data tools)
 lib/
   supabase/server.js         # cookie-based client for user requests
   supabase/admin.js          # service-role client (server only)
@@ -69,6 +70,8 @@ lib/
   email.js                   # Resend wrapper
   weather.js                 # Open-Meteo: daily temps, seasonal forecast, 5-year normals
   forecast.js                # temperature → kWh regression + suggestion rules
+  chat/gemini.js             # Gemini generateContent loop (plain fetch) + system prompt
+  chat/tools.js              # chatbot tools → existing lib functions, user's own device only
 supabase/
   schema.sql                 # tables, indexes, RLS policies
 scripts/
@@ -108,6 +111,8 @@ RESEND_API_KEY=
 ALERT_FROM_EMAIL=
 HOME_LAT=                       # home city for weather (one fixed location)
 HOME_LON=
+GEMINI_API_KEY=                 # chatbot, server only (aistudio.google.com)
+GEMINI_MODEL=gemini-3.8-flash   # or gemini-3.5-flash-lite
 ```
 
 ## Data model
@@ -202,6 +207,13 @@ User's alerts, newest first, limit 50: `{ alerts: [{ id, ts, type, message, powe
 ### `GET /api/forecast?months=1-12` (default 12)
 
 Returns `{ model, this_month: { month, projected_kwh, projected_bill, ac_kwh_est }, next_days: [{ date, weekday, condition, icon, temp_max_c, temp_min_c, temp_mean_c, rain_chance_pct, rain_mm, wind_max_kmh, humidity_pct, sunrise, sunset, predicted_kwh }] (14), outlook: { headline, decreasing: [{ item, detail }], increasing: [{ item, detail }], months: [{ month, year, days, season, forecast_temp_c, likely_range_c, avg_high_c, avg_low_c, rain_mm, rainy_days, normal_temp_c, vs_normal_c, trend_adjustment_c, weather_basis: forecast|mixed|normals, weather_source, sunset, daylight_h, predicted_kwh, ac_kwh_est, predicted_bill, predicted_slab, change_pct }] }, year: { summary, total_kwh, total_bill, cheapest_month, most_expensive_month, ac_season_returns, ac_peak_month, hottest_month, coldest_month, wettest_month, weather_basis: { seasonal_forecast, mostly_normals, warming_trend } } | null (when months <= 3), weather_share_label, suggestions: [{ type, message }], excludes_taxes: true }`. `400` bad months, `422` if fewer than 7 days of usage. `change_pct` is `null` when no usage is recorded for the current calendar month yet (nothing to compare against); the UI and the suggestion rules both handle that case.
+
+### `POST /api/chat` (logged-in user)
+
+- Body: `{ messages: [{ role: "user" | "assistant", text }] }`, last one from the user; max 20 messages, 2,000 chars each. Returns `{ reply, tools_used }`.
+- Gemini `generateContent` via plain `fetch` (no SDK), key in `x-goog-api-key`. Tools: `get_live_power`, `get_summary`, `get_usage_history`, `get_peak_hours`, `get_alerts`, `get_forecast` - they call the same `lib/` functions as the dashboard with the user's Supabase client (RLS). Up to 5 tool rounds per question; within a turn the model's content is sent back unchanged (Gemini 3 thought signatures).
+- 30 messages per user per hour (in memory, per server instance). `503` no key, `429` limit or Gemini quota, `502` other Gemini errors. Chat history lives in the browser (localStorage), no table.
+- System prompt rules: numbers only from tools, reply in the user's language (English / Urdu / Roman Urdu), energy charge only, never suggest opening the meter, stay on topic.
 
 All user-facing routes get the user from the Supabase session and return `401` if there is none. They only ever read the user's own device.
 

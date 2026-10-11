@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
+import ChatWidget from "@/components/ChatWidget";
 import { fmtRs } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase/client";
 import { useApi } from "@/lib/useApi";
@@ -152,6 +153,7 @@ export default function Shell({ children }) {
           {state.ready ? children : <div className="skeleton h-[60vh] w-full rounded-3xl" />}
         </main>
       </div>
+      {state.ready && <ChatWidget />}
     </DeviceContext.Provider>
   );
 }
