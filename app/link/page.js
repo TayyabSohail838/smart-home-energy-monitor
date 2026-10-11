@@ -15,12 +15,19 @@ export default function LinkDevicePage() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/devices/link", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ link_code: code }),
-    });
-    const body = await res.json().catch(() => ({}));
+    let res, body;
+    try {
+      res = await fetch("/api/devices/link", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ link_code: code }),
+      });
+      body = await res.json().catch(() => ({}));
+    } catch {
+      // Without this the button stays disabled on "Linking…" until a reload.
+      setBusy(false);
+      return setError("Could not reach the server. Check your connection and try again.");
+    }
     setBusy(false);
     if (res.status === 401) return router.replace("/login");
     if (!res.ok && body.error !== "you already have a device") return setError(body.error ?? "Could not link the device");

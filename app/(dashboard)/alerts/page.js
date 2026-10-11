@@ -23,16 +23,23 @@ function EmailSettings() {
   async function save(changes) {
     setSaving(true);
     setNote(null);
-    const res = await fetch("/api/settings", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(changes),
-    });
-    const body = await res.json();
-    setSaving(false);
-    if (!res.ok) return setNote({ ok: false, text: body.error });
-    setForm(body);
-    setNote({ ok: true, text: "Saved" });
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+      // A 500 can come back as an HTML error page, so don't assume JSON.
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return setNote({ ok: false, text: body.error ?? `Could not save (${res.status})` });
+      setForm(body);
+      setNote({ ok: true, text: "Saved" });
+    } catch {
+      setNote({ ok: false, text: "Could not reach the server. Check your connection and try again." });
+    } finally {
+      // Always re-enable the form, or the toggle and Save button stay dead.
+      setSaving(false);
+    }
   }
 
   return (

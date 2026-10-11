@@ -15,16 +15,17 @@ export async function proxy(request) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet, headers) {
+        // @supabase/ssr calls this with the cookie list only, so set the no-cache
+        // headers here directly: a response that carries a refreshed session
+        // cookie must never be cached by a CDN and served to another user.
+        setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );
-          // No-cache headers so a CDN never serves one user's cookie to another.
-          Object.entries(headers ?? {}).forEach(([key, value]) =>
-            response.headers.set(key, value)
-          );
+          response.headers.set("cache-control", "private, no-store, max-age=0, must-revalidate");
+          response.headers.set("vary", "cookie");
         },
       },
     }
@@ -48,6 +49,10 @@ export async function proxy(request) {
 function redirectKeepingCookies(request, response, path) {
   const redirect = NextResponse.redirect(new URL(path, request.url));
   response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
+  // A redirect is per-user (it depends on the session cookie) and may carry a
+  // refreshed one, so it must not be cached either.
+  redirect.headers.set("cache-control", "private, no-store, max-age=0, must-revalidate");
+  redirect.headers.set("vary", "cookie");
   return redirect;
 }
 

@@ -100,12 +100,16 @@ export default function UsagePage() {
             <>
               <p className="text-sm leading-relaxed text-ink-2">{peak.data.message}</p>
               <ul className="mt-4 space-y-2 text-sm text-ink-2">
-                {[...peak.data.hours].sort((a, b) => b.avg_power_w - a.avg_power_w).slice(0, 3).map((x, i) => (
-                  <li key={x.hour} className="flex items-center justify-between rounded-2xl bg-white/70 px-3 py-2 ring-1 ring-black/5">
-                    <span>#{i + 1} · {hourLabel(x.hour)}</span>
-                    <span className="font-medium tabular-nums text-ink">{fmtNum(x.avg_power_w)} W</span>
-                  </li>
-                ))}
+                {[...peak.data.hours]
+                  .filter((x) => x.samples > 0)
+                  .sort((a, b) => b.avg_power_w - a.avg_power_w)
+                  .slice(0, 3)
+                  .map((x, i) => (
+                    <li key={x.hour} className="flex items-center justify-between rounded-2xl bg-white/70 px-3 py-2 ring-1 ring-black/5">
+                      <span>#{i + 1} · {hourLabel(x.hour)}</span>
+                      <span className="font-medium tabular-nums text-ink">{fmtNum(x.avg_power_w)} W</span>
+                    </li>
+                  ))}
               </ul>
             </>
           ) : (

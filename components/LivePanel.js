@@ -27,14 +27,17 @@ export default function LivePanel({ deviceId, onReading }) {
     let cancelled = false;
 
     (async () => {
+      // Newest first so the limit keeps the most recent readings (a reconnecting
+      // device can backfill far more than 200 rows into this window), then flip
+      // back to chart order.
       const { data } = await supabase
         .from("readings")
         .select("ts, power_w, current_a")
         .eq("device_id", deviceId)
         .gte("ts", new Date(Date.now() - WINDOW_MS).toISOString())
-        .order("ts", { ascending: true })
+        .order("ts", { ascending: false })
         .limit(200);
-      if (!cancelled && data) setPoints(data);
+      if (!cancelled && data) setPoints([...data].reverse());
     })();
 
     const channel = supabase
@@ -76,26 +79,34 @@ export default function LivePanel({ deviceId, onReading }) {
         </span>
       }
     >
-      <div key={flashKey} className={`flex flex-wrap items-end gap-x-10 gap-y-3 rounded-2xl ${flashKey ? "animate-flash" : ""}`}>
-        <div>
-          <p className="text-xs text-ink-3">Power</p>
-          <p className="text-5xl font-medium tracking-tight">
-            <AnimatedNumber value={last?.power_w ?? null} />
-            <span className="ml-1 text-xl text-ink-3">W</span>
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-ink-3">Current</p>
-          <p className="text-2xl font-medium">
-            <AnimatedNumber value={last?.current_a ?? null} format={(n) => fmtNum(n, 2)} />
-            <span className="ml-1 text-sm text-ink-3">A</span>
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-ink-3">Voltage (fixed)</p>
-          <p className="text-2xl font-medium">
-            230<span className="ml-1 text-sm text-ink-3">V</span>
-          </p>
+      {/* The flash key lives on a throwaway overlay, not on the row: keying the
+          row remounted the AnimatedNumbers on every reading, so they always
+          re-initialised at the new value and never actually animated. */}
+      <div className="relative rounded-2xl">
+        {flashKey > 0 && (
+          <span key={flashKey} aria-hidden className="animate-flash pointer-events-none absolute inset-0 rounded-2xl" />
+        )}
+        <div className="relative flex flex-wrap items-end gap-x-10 gap-y-3">
+          <div>
+            <p className="text-xs text-ink-3">Power</p>
+            <p className="text-5xl font-medium tracking-tight">
+              <AnimatedNumber value={last?.power_w ?? null} />
+              <span className="ml-1 text-xl text-ink-3">W</span>
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-ink-3">Current</p>
+            <p className="text-2xl font-medium">
+              <AnimatedNumber value={last?.current_a ?? null} format={(n) => fmtNum(n, 2)} />
+              <span className="ml-1 text-sm text-ink-3">A</span>
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-ink-3">Voltage (fixed)</p>
+            <p className="text-2xl font-medium">
+              230<span className="ml-1 text-sm text-ink-3">V</span>
+            </p>
+          </div>
         </div>
       </div>
 

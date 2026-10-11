@@ -23,8 +23,9 @@ export async function POST(request) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const { rows, skipped, error } = parseReadings(body, deviceId);
+  const { rows, skipped, firstSkipReason, error } = parseReadings(body, deviceId);
   if (error) return Response.json({ error }, { status: 400 });
+  if (skipped) console.warn(`readings: skipped ${skipped} of ${skipped + rows.length} (${firstSkipReason})`);
 
   if (rows.length > 0) {
     const { error: insertError } = await supabaseAdmin.from("readings").insert(rows);
@@ -50,5 +51,8 @@ export async function POST(request) {
     }
   }
 
-  return Response.json({ ok: true, ...(skipped ? { skipped } : {}) }, { status: 201 });
+  return Response.json(
+    { ok: true, inserted: rows.length, ...(skipped ? { skipped, skip_reason: firstSkipReason } : {}) },
+    { status: 201 }
+  );
 }

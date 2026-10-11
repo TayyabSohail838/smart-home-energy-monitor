@@ -168,8 +168,9 @@ Tariff rates are not hard-coded in code. They live in `tariff_slabs`, loaded fro
 - Header: `x-device-key: <secret>` and the device id in the body or header.
 - Body: `{ "device_id": "...", "ts": "2026-10-11T14:05:10Z", "current_a": 4.82, "power_w": 1109, "energy_wh": 3.08 }`
 - Also accept an array of readings (the ESP32 sends a backlog after reconnecting).
-- Steps: verify key hash → validate fields → insert with the service-role client → run anomaly check → run slab check → return `201 { ok: true }`.
+- Steps: verify key hash → validate fields → insert with the service-role client → run anomaly check → run slab check → return `201 { ok: true, inserted, skipped?, skip_reason? }`.
 - Errors: `401` bad key, `400` invalid body. Keep responses tiny; the ESP32 only reads the status code.
+- Bad *items* are skipped and counted, never rejected: a stale entry, a device clock a few minutes fast, or one corrupt row must not make the ESP32 retry the whole batch forever. Only a malformed body (not a reading or a non-empty array of ≤1000) or a `device_id` that isn't the authenticated device returns `400`.
 - Alert checks must never make the insert fail. Wrap them in try/catch and log.
 
 ### `POST /api/devices/link` (logged-in user)
@@ -178,7 +179,7 @@ Tariff rates are not hard-coded in code. They live in `tariff_slabs`, loaded fro
 
 ### `GET /api/stats/summary`
 
-Returns `{ today_kwh, month_kwh, bill_so_far, current_slab, units_to_next_slab, projected_month_kwh, projected_bill, projected_slab, days_passed, days_in_month, slab_mode, currency, excludes_taxes: true }`.
+Returns `{ today_kwh, month_kwh, bill_so_far, current_slab, next_slab, units_to_next_slab, projected_month_kwh, projected_bill, projected_slab, days_passed, days_in_month, slab_mode, currency, excludes_taxes: true }`. `next_slab` is the slab above `current_slab` (`null` on the top, open-ended slab) so the UI can name its real range.
 
 ### `GET /api/stats/history?range=day|week|month|30d`
 
@@ -188,7 +189,7 @@ Returns `{ today_kwh, month_kwh, bill_so_far, current_slab, units_to_next_slab, 
 
 ### `GET /api/stats/peak-hours`
 
-Returns 24 items `{ hour, avg_power_w }` plus `top_hours` (the 3 highest).
+Returns 24 items `{ hour, avg_power_w, samples }` plus `top_hours` (the 3 highest). Rank only hours with `samples > 0`: an hour with no readings averages 0 and isn't a measurement.
 
 ### `GET /api/alerts`
 
@@ -200,7 +201,7 @@ User's alerts, newest first, limit 50: `{ alerts: [{ id, ts, type, message, powe
 
 ### `GET /api/forecast?months=1-12` (default 12)
 
-Returns `{ model, this_month: { month, projected_kwh, projected_bill, ac_kwh_est }, next_days: [{ date, weekday, condition, icon, temp_max_c, temp_min_c, temp_mean_c, rain_chance_pct, rain_mm, wind_max_kmh, humidity_pct, sunrise, sunset, predicted_kwh }] (14), outlook: { headline, decreasing: [{ item, detail }], increasing: [{ item, detail }], months: [{ month, year, days, season, forecast_temp_c, likely_range_c, avg_high_c, avg_low_c, rain_mm, rainy_days, normal_temp_c, vs_normal_c, trend_adjustment_c, weather_basis: forecast|mixed|normals, weather_source, sunset, daylight_h, predicted_kwh, ac_kwh_est, predicted_bill, predicted_slab, change_pct }] }, year: { summary, total_kwh, total_bill, cheapest_month, most_expensive_month, ac_season_returns, ac_peak_month, hottest_month, coldest_month, wettest_month, weather_basis: { seasonal_forecast, mostly_normals, warming_trend } } | null (when months <= 3), weather_share_label, suggestions: [{ type, message }], excludes_taxes: true }`. `400` bad months, `422` if fewer than 7 days of usage.
+Returns `{ model, this_month: { month, projected_kwh, projected_bill, ac_kwh_est }, next_days: [{ date, weekday, condition, icon, temp_max_c, temp_min_c, temp_mean_c, rain_chance_pct, rain_mm, wind_max_kmh, humidity_pct, sunrise, sunset, predicted_kwh }] (14), outlook: { headline, decreasing: [{ item, detail }], increasing: [{ item, detail }], months: [{ month, year, days, season, forecast_temp_c, likely_range_c, avg_high_c, avg_low_c, rain_mm, rainy_days, normal_temp_c, vs_normal_c, trend_adjustment_c, weather_basis: forecast|mixed|normals, weather_source, sunset, daylight_h, predicted_kwh, ac_kwh_est, predicted_bill, predicted_slab, change_pct }] }, year: { summary, total_kwh, total_bill, cheapest_month, most_expensive_month, ac_season_returns, ac_peak_month, hottest_month, coldest_month, wettest_month, weather_basis: { seasonal_forecast, mostly_normals, warming_trend } } | null (when months <= 3), weather_share_label, suggestions: [{ type, message }], excludes_taxes: true }`. `400` bad months, `422` if fewer than 7 days of usage. `change_pct` is `null` when no usage is recorded for the current calendar month yet (nothing to compare against); the UI and the suggestion rules both handle that case.
 
 All user-facing routes get the user from the Supabase session and return `401` if there is none. They only ever read the user's own device.
 
