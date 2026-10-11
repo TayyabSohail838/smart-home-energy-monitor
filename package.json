@@ -11,7 +11,8 @@
     "create-device": "node --env-file=.env.local scripts/create-device.js",
     "fake-device": "node --env-file=.env.local scripts/fake-device.js",
     "get-token": "node --env-file=.env.local scripts/get-token.js",
-    "seed": "node --env-file=.env.local scripts/seed.js"
+    "seed": "node --env-file=.env.local scripts/seed.js",
+    "api": "node --env-file=.env.local scripts/api.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
