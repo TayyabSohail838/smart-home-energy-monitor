@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const STORAGE_KEY = "wattwise-chat";
+const STORAGE_KEY = "wattly-chat";
 const SUGGESTIONS = [
   "Why is my bill high this month?",
   "When should I run the iron?",
@@ -98,7 +98,7 @@ export default function ChatWidget() {
           <header className="flex items-center gap-3 border-b border-black/5 px-5 py-4">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-ink text-accent">⚡</span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">Ask WattWise</p>
+              <p className="text-sm font-medium">Ask Wattly</p>
               <p className="text-[11px] text-ink-3">Answers from your live data · Gemini</p>
             </div>
             {messages.length > 0 && (
@@ -201,7 +201,7 @@ export default function ChatWidget() {
         aria-expanded={open}
       >
         <span className="text-accent">{open ? "✕" : "⚡"}</span>
-        {open ? "Close" : "Ask WattWise"}
+        {open ? "Close" : "Ask Wattly"}
       </button>
     </>
   );
