@@ -66,6 +66,27 @@ scripts/
   seed.js                    # sample history generator
 ```
 
+## Dashboard (UI)
+
+Light glass style, Tailwind v4 tokens in `app/globals.css`, Recharts for graphs, CSS-only animations (no animation library).
+
+```
+app/login/page.js              # log in / sign up (Supabase Auth in the browser)
+app/link/page.js               # enter the device link code
+app/(dashboard)/layout.js      # sidebar shell for the pages below (instant = false: per-user pages)
+app/(dashboard)/page.js        # Overview: live power (Realtime), bill, slab meter, today, weather, peak hours
+app/(dashboard)/usage/page.js  # history tabs (day/week/month/30d) + table view, peak-hours chart
+app/(dashboard)/forecast/...   # 14-day and 12-month views, outlook, suggestions, model
+app/(dashboard)/alerts/...     # alert timeline + email settings
+components/                    # Shell (sidebar, user+device context), charts, ui, LivePanel, SlabMeter, AlertBanner
+lib/supabase/client.js         # browser client (anon key only)
+lib/useApi.js, lib/useNow.js   # fetch our routes (401 -> /login, no device -> /link); pure clock
+```
+
+- `proxy.js` redirects logged-out page requests to `/login` (API routes return 401 themselves).
+- Pages fetch our own API routes; the Overview subscribes to `readings` inserts via Realtime (RLS applies).
+- Chart colours follow the validated dataviz reference palette: blue `#2a78d6` for usage, orange `#eb6834` for AC/temperature; status colours always with an icon + label.
+
 ## Environment variables
 
 Stored in `.env.local` (never committed) and in Vercel project settings.
