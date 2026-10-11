@@ -170,7 +170,7 @@ User's alerts, newest first, limit 50: `{ alerts: [{ id, ts, type, message, powe
 
 ### `GET /api/forecast`
 
-Returns `{ next_days: [{ date, temp_c, predicted_kwh }], next_month: { month, avg_temp_c, predicted_kwh, predicted_bill, change_pct }, weather_share_kwh, suggestions: [{ type, message }], excludes_taxes: true }`.
+Returns `{ model: { formula, base_kwh_per_day, kwh_per_degree, r2, training_days }, this_month: { projected_kwh, projected_bill }, next_days: [{ date, weekday, temp_c, predicted_kwh }] (7), next_month: { month, year, days, avg_temp_c, climate_years, predicted_kwh, predicted_bill, predicted_slab, change_pct }, weather_share_kwh, weather_share_label, suggestions: [{ type: rising|falling|steady|slab|heat|mild, message }], excludes_taxes: true }`. `422` if fewer than 7 days of usage.
 
 All user-facing routes get the user from the Supabase session and return `401` if there is none. They only ever read the user's own device.
 
