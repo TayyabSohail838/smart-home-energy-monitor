@@ -1,6 +1,6 @@
 # CLAUDE.md — Smart Home Energy Monitor (Backend)
 
-Backend for a 24-hour hackathon project. An ESP32 with an SCT-013 clamp posts electricity readings every 10 seconds; this backend stores them, runs anomaly and tariff-slab checks, sends alert emails, and serves stats to the dashboard.
+Backend for a 24-hour hackathon project. An ESP32 with a PZEM-004T v3.0 (100 A split-core CT) posts electricity readings every 10 seconds; this backend stores them, runs anomaly and tariff-slab checks, sends alert emails, and serves stats to the dashboard.
 
 The full design lives in the "Smart Home Energy Monitor: System Architecture" doc. This file is the working summary for the backend only.
 
@@ -76,6 +76,9 @@ supabase/
   schema.sql                 # tables, indexes, RLS policies
 scripts/
   seed.js                    # sample history generator
+firmware/
+  wattly-esp32/wattly-esp32.ino  # ESP32 + PZEM-004T: read every 10 s, POST to /api/readings (backlog when offline)
+  wattly-esp32/secrets.example.h # copy to secrets.h (git-ignored): Wi-Fi, DEVICE_ID, DEVICE_SECRET, API_URL
 ```
 
 ## Dashboard (UI)
