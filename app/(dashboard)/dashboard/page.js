@@ -47,9 +47,10 @@ export default function OverviewPage() {
   }, [reloadSummary, reloadToday, reloadAlerts]);
 
   const s = summary.data;
+  const slabRange = (slab) => (slab.max_units === null ? `${slab.min_units}+` : `${slab.min_units}–${slab.max_units}`);
   const nextSlabNote =
-    s && s.units_to_next_slab != null
-      ? `${fmtNum(s.units_to_next_slab)} units until slab ${s.current_slab.max_units + 1}+`
+    s && s.units_to_next_slab != null && s.next_slab
+      ? `${fmtNum(s.units_to_next_slab)} units until slab ${slabRange(s.next_slab)}`
       : "Top slab";
 
   return (
@@ -75,9 +76,9 @@ export default function OverviewPage() {
               <p className="mt-1 text-lg font-medium">{s ? `Rs ${s.current_slab.rate_per_unit}` : "…"}<span className="text-xs text-ink-3"> /unit</span></p>
             </div>
           </div>
-          {s && s.projected_slab.id > s.current_slab.id && (
+          {s && s.projected_slab.min_units > s.current_slab.min_units && (
             <div className="mt-4">
-              <Badge status="warning">Heading for slab {s.projected_slab.min_units}–{s.projected_slab.max_units ?? "+"}</Badge>
+              <Badge status="warning">Heading for slab {slabRange(s.projected_slab)}</Badge>
             </div>
           )}
         </Card>

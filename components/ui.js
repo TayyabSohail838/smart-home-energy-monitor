@@ -26,6 +26,9 @@ export function Card({ title, subtitle, action, children, className = "", delay 
 // Counts up/down smoothly to `value` whenever it changes.
 export function AnimatedNumber({ value, format = (n) => Math.round(n).toLocaleString("en-US"), duration = 700 }) {
   const [shown, setShown] = useState(value ?? 0);
+  // Track what is on screen right now, not just where the last finished
+  // animation ended: if `value` changes mid-flight the next run has to start
+  // from the number the user is currently looking at, or it jumps backwards.
   const from = useRef(value ?? 0);
 
   useEffect(() => {
@@ -36,9 +39,9 @@ export function AnimatedNumber({ value, format = (n) => Math.round(n).toLocaleSt
     const tick = (t) => {
       const p = Math.min(1, (t - start) / duration);
       const eased = 1 - Math.pow(1 - p, 3);
-      setShown(a + (value - a) * eased);
+      from.current = a + (value - a) * eased;
+      setShown(from.current);
       if (p < 1) frame = requestAnimationFrame(tick);
-      else from.current = value;
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);

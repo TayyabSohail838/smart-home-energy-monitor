@@ -29,7 +29,7 @@ function Svg({ name, className = "h-[18px] w-[18px]" }) {
 }
 
 const NAV = [
-  { href: "/", label: "Overview", icon: "overview" },
+  { href: "/dashboard", label: "Overview", icon: "overview" },
   { href: "/usage", label: "Usage", icon: "usage" },
   { href: "/forecast", label: "Forecast", icon: "forecast" },
   { href: "/alerts", label: "Alerts", icon: "alerts" },
@@ -49,7 +49,7 @@ function Sidebar({ onNavigate, user }) {
     <aside className="glass-strong flex h-full w-[260px] flex-col rounded-[28px] p-5">
       <div className="flex items-center gap-2 px-1">
         <span className="grid h-8 w-8 place-items-center rounded-xl bg-ink text-sm text-accent">⚡</span>
-        <span className="text-[17px] font-semibold tracking-tight">WattWise</span>
+        <span className="text-[17px] font-semibold tracking-tight">Wattly</span>
       </div>
 
       <h1 className="mt-8 px-1 text-[26px] font-medium leading-tight tracking-tight">
@@ -60,7 +60,7 @@ function Sidebar({ onNavigate, user }) {
 
       <nav className="mt-7 flex flex-col gap-1">
         {NAV.map((item, i) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
@@ -147,7 +147,7 @@ export default function Shell({ children }) {
             <button onClick={() => setDrawer(true)} className="glass rounded-full p-2.5" aria-label="Open menu">
               <Svg name="menu" />
             </button>
-            <span className="font-semibold">WattWise</span>
+            <span className="font-semibold">Wattly</span>
           </div>
           {state.ready ? children : <div className="skeleton h-[60vh] w-full rounded-3xl" />}
         </main>

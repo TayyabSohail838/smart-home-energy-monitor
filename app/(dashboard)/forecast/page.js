@@ -54,10 +54,14 @@ function MonthDetail({ m }) {
         <Stat label="Sunset" hint={`${fmtNum(m.daylight_h, 1)} h daylight`}>{m.sunset}</Stat>
         <Stat label="Units" hint={`AC (est.) ${fmtNum(m.ac_kwh_est)} kWh`}>{fmtNum(m.predicted_kwh)}</Stat>
         <Stat label="Bill (energy)" hint={`Slab ${m.predicted_slab}`}>{fmtRs(m.predicted_bill)}</Stat>
-        <Stat label="vs this month">
-          <span style={{ color: m.change_pct <= 0 ? "#006300" : "var(--critical)" }}>
-            {m.change_pct <= 0 ? "▼" : "▲"} {fmtNum(Math.abs(m.change_pct))}%
-          </span>
+        <Stat label="vs this month" hint={m.change_pct == null ? "no usage this month yet" : null}>
+          {m.change_pct == null ? (
+            <span className="text-ink-3">–</span>
+          ) : (
+            <span style={{ color: m.change_pct <= 0 ? "#006300" : "var(--critical)" }}>
+              {m.change_pct <= 0 ? "▼" : "▲"} {fmtNum(Math.abs(m.change_pct))}%
+            </span>
+          )}
         </Stat>
       </div>
     </div>

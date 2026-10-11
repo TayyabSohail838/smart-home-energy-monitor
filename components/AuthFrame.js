@@ -5,7 +5,7 @@ export default function AuthFrame({ title, subtitle, children }) {
       <div className="glass-strong w-full max-w-md rounded-[32px] p-8 animate-fade-up">
         <div className="flex items-center gap-2">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-ink text-accent">⚡</span>
-          <span className="text-lg font-semibold tracking-tight">WattWise</span>
+          <span className="text-lg font-semibold tracking-tight">Wattly</span>
         </div>
         <h1 className="mt-8 text-3xl font-medium tracking-tight">{title}</h1>
         {subtitle && <p className="mt-2 text-sm leading-relaxed text-ink-2">{subtitle}</p>}
