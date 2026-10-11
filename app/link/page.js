@@ -31,7 +31,7 @@ export default function LinkDevicePage() {
     setBusy(false);
     if (res.status === 401) return router.replace("/login");
     if (!res.ok && body.error !== "you already have a device") return setError(body.error ?? "Could not link the device");
-    router.replace("/");
+    router.replace("/dashboard");
   }
 
   async function logout() {

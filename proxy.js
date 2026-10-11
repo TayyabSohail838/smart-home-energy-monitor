@@ -5,6 +5,15 @@ import { NextResponse } from "next/server";
 // Refreshes the Supabase login cookie when it's about to expire, so routes
 // and pages always see a valid session.
 export async function proxy(request) {
+  const { pathname } = request.nextUrl;
+
+  // The landing page and its images are public, so skip the auth work entirely:
+  // there is no session to refresh, a first-time visitor shouldn't wait on a
+  // Supabase round-trip, and the page still renders if Supabase is down.
+  // Logged-in users are NOT bounced off it, so the demo can open on the landing
+  // page and click through to the dashboard.
+  if (pathname === "/" || pathname.startsWith("/landing/")) return NextResponse.next({ request });
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -36,11 +45,10 @@ export async function proxy(request) {
   } = await supabase.auth.getUser();
 
   // Pages need a login; API routes answer 401 themselves.
-  const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
   const isLogin = pathname === "/login";
   if (!isApi && !user && !isLogin) return redirectKeepingCookies(request, response, "/login");
-  if (!isApi && user && isLogin) return redirectKeepingCookies(request, response, "/");
+  if (!isApi && user && isLogin) return redirectKeepingCookies(request, response, "/dashboard");
 
   return response;
 }
@@ -58,5 +66,5 @@ function redirectKeepingCookies(request, response, path) {
 
 export const config = {
   // Skip static files and the device-only routes (the ESP32 has no login).
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/readings|api/health).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|landing/|api/readings|api/health).*)"],
 };
