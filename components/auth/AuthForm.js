@@ -56,6 +56,7 @@ export default function AuthForm({ initialMode }) {
   const [busy, setBusy] = useState(false);
   const [shaking, setShaking] = useState(false);
   const [success, setSuccess] = useState(null); // null | { type: "connected" | "receipt", email? }
+  const [forgot, setForgot] = useState(false);
 
   const c = COPY[mode];
   const signup = mode === "signup";
@@ -133,6 +134,7 @@ export default function AuthForm({ initialMode }) {
     }
   }
 
+  if (forgot) return <ForgotPassword initialEmail={email} onBack={() => setForgot(false)} />;
   if (success?.type === "receipt") return <Receipt email={success.email} onBackToLogin={() => switchMode("login")} />;
 
   return (
@@ -207,6 +209,15 @@ export default function AuthForm({ initialMode }) {
                 confirmError={fieldErrors.confirm}
                 disabled={busy}
               />
+              {!signup && (
+                <button
+                  type="button"
+                  onClick={() => setForgot(true)}
+                  className="-mt-2 block font-bill text-xs uppercase tracking-wide text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+                >
+                  Forgot password?
+                </button>
+              )}
             </div>
 
             <button
@@ -237,7 +248,7 @@ export default function AuthForm({ initialMode }) {
   );
 }
 
-function Field({ id, label, urdu, type, autoComplete, value, onChange, error, disabled, children }) {
+export function Field({ id, label, urdu, type, autoComplete, value, onChange, error, disabled, children }) {
   return (
     <div>
       <div className="flex items-baseline justify-between">
@@ -322,6 +333,76 @@ function PasswordFields({ signup, password, confirmPassword, onPassword, onConfi
   );
 }
 
+// Sends a reset link; the link opens /reset-password, where the new password is set.
+// Always shows the same receipt, so the form doesn't reveal which emails have accounts.
+function ForgotPassword({ initialEmail, onBack }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!EMAIL_RE.test(email.trim())) return setError("Enter a valid email address.");
+    setBusy(true);
+    setError(null);
+    const { error } = await getSupabase().auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error && /rate limit|too many/i.test(error.message)) return setError("Too many reset emails. Wait a while and try again.");
+    setSent(true);
+  }
+
+  return (
+    <div id="auth-panel" className="bill-box">
+      <div className="bill-box-head flex flex-wrap items-center justify-between gap-2 px-5 py-2.5">
+        <span className="font-display text-base font-extrabold uppercase tracking-wide">Reset password</span>
+        <span lang="ur" dir="rtl" className="font-urdu text-base text-ink-soft">
+          پاس ورڈ بھول گئے؟
+        </span>
+      </div>
+      {sent ? (
+        <div className="flex flex-col items-center gap-4 px-5 py-14 text-center">
+          <Stamp tone="ink" faint className="px-4 py-1.5 text-base">
+            Sent
+          </Stamp>
+          <p className="max-w-xs text-sm leading-relaxed text-ink-soft">
+            If <span className="text-ink">{email.trim()}</span> has an account, a reset link is on its way. Open it in this
+            browser to choose a new password.
+          </p>
+          <button
+            type="button"
+            onClick={onBack}
+            className="mt-2 rounded-[4px] bg-ink px-5 py-3 font-display text-base font-extrabold uppercase leading-none text-paper transition hover:opacity-85"
+          >
+            Back to log in
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="px-5 py-6">
+          <h1 className="font-display text-[34px] font-black uppercase leading-none md:text-[44px]">Forgot it?</h1>
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">Enter your email and we&apos;ll send a link to set a new password.</p>
+          <div className="mt-6">
+            <Field id="reset-email" label="Email" urdu="ای میل" type="email" autoComplete="email" value={email} onChange={setEmail} error={error} disabled={busy} />
+          </div>
+          <button
+            type="submit"
+            disabled={busy || !email}
+            className="mt-7 flex w-full items-center justify-center gap-2.5 rounded-[4px] bg-ink px-5 py-3.5 font-display text-[20px] font-extrabold uppercase leading-none text-paper transition-all hover:-translate-y-0.5 hover:shadow-[4px_4px_0_var(--ink)] disabled:translate-y-0 disabled:opacity-50 disabled:shadow-none"
+          >
+            {busy && <Spinner />}
+            {busy ? "Sending…" : "Send reset link"}
+          </button>
+          <button type="button" onClick={onBack} className="mt-5 block w-full text-center text-sm font-semibold text-ink underline-offset-4 hover:underline">
+            Back to log in
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 function Receipt({ email, onBackToLogin }) {
   return (
     <div id="auth-panel" className="bill-box relative">
@@ -351,7 +432,7 @@ function Receipt({ email, onBackToLogin }) {
   );
 }
 
-function Spinner() {
+export function Spinner() {
   return <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-paper/40 border-t-paper" aria-hidden="true" />;
 }
 

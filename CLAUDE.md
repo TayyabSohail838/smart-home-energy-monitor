@@ -83,7 +83,8 @@ scripts/
 Light glass style, Tailwind v4 tokens in `app/globals.css`, Recharts for graphs, CSS-only animations (no animation library).
 
 ```
-app/login/page.js              # log in / sign up (Supabase Auth in the browser)
+app/login/page.js              # log in / sign up / "Forgot password?" (Supabase Auth in the browser)
+app/reset-password/page.js     # set a new password from the reset email link (same browser)
 app/link/page.js               # enter the device link code
 app/(dashboard)/layout.js      # sidebar shell for the pages below (instant = false: per-user pages)
 app/(dashboard)/page.js        # Overview: live power (Realtime), bill, slab meter, today, weather, peak hours
