@@ -12,6 +12,15 @@ The full design lives in the "Smart Home Energy Monitor: System Architecture" do
 
 Time is the main constraint. Prefer the simplest thing that works and is easy to explain to judges.
 
+## Build status
+
+Done: ingestion (`POST /api/readings`, deployed on Vercel), login + device linking, 30-day seed, history, peak hours, slab bill + summary, anomaly detection, alerts + email (Resend), settings, weather forecast (14 days + 12 months), dashboard UI.
+
+Remaining:
+1. Hardware integration: real ESP32 → deployed API (keep 4–5 hours; until then `npm run fake-device`).
+2. Demo prep: re-run `npm run seed` before recording, add `RESEND_API_KEY` / `ALERT_FROM_EMAIL` in Vercel, README.
+3. Optional, only if time remains: load-shedding (outage) prediction from reading gaps — currently Dropped in the design doc.
+
 ## Stack
 
 | Layer | Choice |
