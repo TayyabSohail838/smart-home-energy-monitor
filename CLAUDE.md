@@ -48,6 +48,7 @@ app/
     stats/history/route.js   # GET   - ?range=day|week|month|30d
     stats/peak-hours/route.js# GET   - avg power per hour + top 3
     alerts/route.js          # GET   - user's alerts, newest first
+    settings/route.js        # GET, PATCH - email_alerts on/off, alert_email
     forecast/route.js        # GET   - predicted kWh/bill + suggestions
 lib/
   supabase/server.js         # cookie-based client for user requests
@@ -161,7 +162,11 @@ Returns 24 items `{ hour, avg_power_w }` plus `top_hours` (the 3 highest).
 
 ### `GET /api/alerts`
 
-User's alerts, newest first, limit 50.
+User's alerts, newest first, limit 50: `{ alerts: [{ id, ts, type, message, power_w, emailed }] }`.
+
+### `GET` / `PATCH /api/settings`
+
+`{ email_alerts, alert_email }`. PATCH accepts either or both fields. The row is created when the user links a device.
 
 ### `GET /api/forecast`
 
@@ -194,7 +199,7 @@ All user-facing routes get the user from the Supabase session and return `401` i
 5. Suggestions are fixed if/then rules with templates (no LLM): usage rising → shift iron/washing machine out of peak hours, AC at 26°C; usage falling → expected saving in PKR; projection enters a higher slab → units per day to save.
 6. The weather-driven part (`b × CDD`) is an estimate, not measured AC use. Label it "weather-driven usage (est.)" in the API and UI.
 
-**Alerts:** insert into `alerts`, then email via Resend if `user_settings.email_alerts` is on. Set `emailed = true` on success. Email failure is logged, never thrown.
+**Alerts:** insert into `alerts`, then email via Resend if `user_settings.email_alerts` is on. Set `emailed = true` on success. Email failure is logged, never thrown. Without a verified domain, `onboarding@resend.dev` only delivers to the Resend account's own email (inovixco@gmail.com). The slab warning check is throttled to once per 10 minutes per device; "once per slab per month" is enforced by the slab name in the alert message.
 
 ## Security rules
 

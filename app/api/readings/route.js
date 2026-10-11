@@ -1,6 +1,7 @@
 import { checkAnomaly } from "@/lib/anomaly";
 import { verifyDevice } from "@/lib/deviceAuth";
 import { parseReadings } from "@/lib/readings";
+import { checkSlab } from "@/lib/slabWarning";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 // POST /api/readings - called by the ESP32 every 10 s.
@@ -41,7 +42,12 @@ export async function POST(request) {
     } catch (err) {
       console.error("anomaly check failed:", err);
     }
-    // Slab warning check goes here (Step 12).
+    try {
+      const result = await checkSlab(deviceId);
+      if (result.warned) console.log("slab warning:", result.message);
+    } catch (err) {
+      console.error("slab check failed:", err);
+    }
   }
 
   return Response.json({ ok: true, ...(skipped ? { skipped } : {}) }, { status: 201 });
