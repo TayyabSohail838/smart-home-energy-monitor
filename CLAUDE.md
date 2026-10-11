@@ -49,7 +49,7 @@ app/
     stats/peak-hours/route.js# GET   - avg power per hour + top 3
     alerts/route.js          # GET   - user's alerts, newest first
     settings/route.js        # GET, PATCH - email_alerts on/off, alert_email
-    forecast/route.js        # GET   - predicted kWh/bill + suggestions
+    forecast/route.js        # GET   - 7-day + 3-month outlook, kWh/bill, suggestions
 lib/
   supabase/server.js         # cookie-based client for user requests
   supabase/admin.js          # service-role client (server only)
@@ -58,7 +58,7 @@ lib/
   bill.js                    # slab pricing + month-end projection
   alerts.js                  # create alert row + send email
   email.js                   # Resend wrapper
-  weather.js                 # Open-Meteo forecast + monthly climate average
+  weather.js                 # Open-Meteo: daily temps, seasonal forecast, 5-year normals
   forecast.js                # temperature → kWh regression + suggestion rules
 supabase/
   schema.sql                 # tables, indexes, RLS policies
@@ -170,7 +170,7 @@ User's alerts, newest first, limit 50: `{ alerts: [{ id, ts, type, message, powe
 
 ### `GET /api/forecast`
 
-Returns `{ model: { formula, base_kwh_per_day, kwh_per_degree, r2, training_days }, this_month: { projected_kwh, projected_bill }, next_days: [{ date, weekday, temp_c, predicted_kwh }] (7), next_month: { month, year, days, avg_temp_c, climate_years, predicted_kwh, predicted_bill, predicted_slab, change_pct }, weather_share_kwh, weather_share_label, suggestions: [{ type: rising|falling|steady|slab|heat|mild, message }], excludes_taxes: true }`. `422` if fewer than 7 days of usage.
+Returns `{ model, this_month: { month, projected_kwh, projected_bill, ac_kwh_est }, next_days: [{ date, weekday, temp_c, predicted_kwh }] (7), outlook: { headline, decreasing: [{ item, detail }], increasing: [{ item, detail }], months: [{ month, year, days, season, forecast_temp_c, likely_range_c, normal_temp_c, vs_normal_c, weather_source, sunset, daylight_h, predicted_kwh, ac_kwh_est, predicted_bill, predicted_slab, change_pct }] (3) }, weather_share_label, suggestions: [{ type, message }], excludes_taxes: true }`. `422` if fewer than 7 days of usage.
 
 All user-facing routes get the user from the Supabase session and return `401` if there is none. They only ever read the user's own device.
 
@@ -192,12 +192,13 @@ All user-facing routes get the user from the Supabase session and return `401` i
 5. Energy charge only. Taxes, fuel adjustment and fixed charges are excluded, and the API response should say so (`excludes_taxes: true`).
 
 **Usage forecast (weather-based):**
-1. Weather comes from Open-Meteo (free, no API key, plain `fetch`, cached ~1 hour). Next 7 days: forecast API. Recent past days: forecast API with `past_days` (the archive API lags ~5 days). Next month: average temperature for that month over the last 5 years (a real month-ahead weather forecast doesn't exist; call it a climate average).
-2. Cooling degrees `CDD = max(0, daily avg temp − 24°C)`.
-3. Fit `daily_kwh = a + b × CDD` with simple linear regression on the user's past days (plain JS, no library). `a` = base load, `b` = extra kWh per degree of heat (mostly AC).
-4. Predict next days and next month with the same formula; price next month with `lib/bill.js`.
-5. Suggestions are fixed if/then rules with templates (no LLM): usage rising → shift iron/washing machine out of peak hours, AC at 26°C; usage falling → expected saving in PKR; projection enters a higher slab → units per day to save.
-6. The weather-driven part (`b × CDD`) is an estimate, not measured AC use. Label it "weather-driven usage (est.)" in the API and UI.
+1. Weather comes from Open-Meteo (free, no API key, plain `fetch`, cached in memory). Recent past days + next 7 days: forecast API (`past_days`; the archive API lags ~5 days). Next 3 months: seasonal API (ECMWF, ~51 ensemble runs, 120 days). It predicts monthly tendencies, not exact daily weather; say so. Normals and sunset times: archive API, last 5 full years.
+2. Cooling degrees `CDD = max(0, daily mean temp − 24°C)`.
+3. Fit `daily_kwh = a + b × CDD` with simple linear regression on the user's past days (plain JS, no library). `a` = base load, `b` = extra kWh per degree of heat (mostly AC). Report R².
+4. Each outlook month: average the ensemble's daily CDD → `predicted_kwh = days × (a + b × CDD)`, priced with `lib/bill.js`. `ac_kwh_est = days × b × CDD`. Likely range = 10th–90th percentile of the runs' monthly means. Season label from the forecast temperature.
+5. Outlook lists what goes down/up: AC (from `ac_kwh_est`), lighting (earlier/later sunset), heating (months below 17°C). Lighting and heating are described, not added to kWh: the model has no cold-day data to measure them.
+6. Suggestions are fixed if/then rules with templates (no LLM): rising/falling/steady usage, units per day to stay in a cheaper slab, hot/mild days ahead, LED lighting, winter heating.
+7. The weather-driven part is an estimate, not measured AC use. Label it "weather-driven usage (est.)" in the API and UI.
 
 **Alerts:** insert into `alerts`, then email via Resend if `user_settings.email_alerts` is on. Set `emailed = true` on success. Email failure is logged, never thrown. Without a verified domain, `onboarding@resend.dev` only delivers to the Resend account's own email (inovixco@gmail.com). The slab warning check is throttled to once per 10 minutes per device; "once per slab per month" is enforced by the slab name in the alert message.
 
