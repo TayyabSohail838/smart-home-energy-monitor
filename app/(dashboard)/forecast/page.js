@@ -2,21 +2,35 @@
 
 import { useState } from "react";
 import { DailyForecastChart, RainChart, TempRangeChart, YearUsageChart } from "@/components/charts";
+import Stamp from "@/components/auth/Stamp";
+import CalibrationPlate from "@/components/meter/CalibrationPlate";
+import DayTiles from "@/components/meter/DayTiles";
+import YearTape from "@/components/meter/YearTape";
 import PageHeader from "@/components/PageHeader";
-import { AnimatedNumber, Badge, Card, ErrorNote, Skeleton, Stat, Tabs } from "@/components/ui";
-import { fmtDay, fmtNum, fmtRs, WEATHER_EMOJI } from "@/lib/format";
+import { Badge, Card, ErrorNote, Skeleton, Stat, Tabs } from "@/components/ui";
+import { fmtNum, fmtRs, WEATHER_EMOJI } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
-const SUGGESTION_ICON = {
-  rising: "📈", falling: "📉", steady: "➖", slab: "💡", heat: "🔥", mild: "🌤️",
-  storm: "⛈️", lighting: "💡", heating: "🧣",
-};
+const MONTH_OPTIONS = [
+  { value: 3, label: "3 MO" },
+  { value: 6, label: "6 MO" },
+  { value: 12, label: "12 MO" },
+];
 
 const BASIS = {
   forecast: { status: "good", label: "Seasonal forecast" },
   mixed: { status: "warning", label: "Partly forecast" },
   normals: { status: "info", label: "Typical year" },
 };
+
+// Advisory stamp by suggestion type (dashboard-design.md §6.4): HEAT WARNING
+// (red) for hot days ahead, STORM (blue) for thunderstorms, ADVISORY (ink)
+// for everything else (rising/falling/steady usage, slab, lighting, heating).
+function stampFor(type) {
+  if (type === "heat") return { label: "HEAT WARNING", tone: "red" };
+  if (type === "storm") return { label: "STORM", tone: "blue" };
+  return { label: "ADVISORY", tone: "ink" };
+}
 
 function DayDetail({ d }) {
   return (
@@ -72,15 +86,27 @@ export default function ForecastPage() {
   const [view, setView] = useState("days");
   const [dayIdx, setDayIdx] = useState(0);
   const [monthIdx, setMonthIdx] = useState(0);
-  const f = useApi("/api/forecast?months=12");
+  const [monthsParam, setMonthsParam] = useState(12);
+  const [showAllTips, setShowAllTips] = useState(false);
+  // keepDataOnError: a 422 (fewer than 7 days of usage) still carries next_days
+  // (dashboard-design.md §6.5) - the page then shows weather only, no kWh model.
+  const f = useApi(`/api/forecast?months=${monthsParam}`, { keepDataOnError: true });
   const data = f.data;
+  const calibrating = Boolean(data && !data.model);
+
+  function changeMonths(v) {
+    setMonthsParam(v);
+    setMonthIdx(0);
+  }
 
   return (
     <>
       <PageHeader title="Forecast" subtitle="Weather for Faisalabad and what it means for your bill">
-        <Tabs options={[{ value: "days", label: "Next 14 days" }, { value: "year", label: "12 months" }]} value={view} onChange={setView} />
+        {!calibrating && (
+          <Tabs options={[{ value: "days", label: "Next 14 days" }, { value: "year", label: "12 months" }]} value={view} onChange={setView} />
+        )}
       </PageHeader>
-      <ErrorNote message={f.error} onRetry={f.reload} />
+      {!data && <ErrorNote message={f.error} onRetry={f.reload} />}
 
       {!data ? (
         <div className="grid gap-5">
@@ -88,54 +114,57 @@ export default function ForecastPage() {
           <Skeleton className="h-64 w-full rounded-3xl" />
           <p className="text-center text-xs text-ink-3">Fetching weather and seasonal forecast…</p>
         </div>
+      ) : calibrating ? (
+        <div className="grid gap-5">
+          <p className="text-sm leading-relaxed text-ink-soft">
+            Weather is live below. Predicted kWh needs at least 7 days of your own readings first.
+          </p>
+          <div>
+            <p className="mb-3 font-bill text-[11px] uppercase tracking-wide text-ink-soft">Next 14 days</p>
+            <DayTiles days={data.next_days} selected={dayIdx} onSelect={setDayIdx} />
+            <div className="mt-4 rounded-md border border-ink/15 p-4">
+              <DayDetail d={data.next_days[dayIdx]} />
+            </div>
+          </div>
+          <CalibrationPlate model={null} />
+        </div>
       ) : (
         <div className="grid gap-5 lg:grid-cols-3">
-          {/* Headline */}
+          {/* Outlook board (dashboard-design.md §6.3) */}
           <Card delay={0} className="lg:col-span-3" hover={false}>
-            <div className="flex flex-wrap items-start gap-4">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-accent-soft text-2xl">🌡️</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-ink-3">Outlook</p>
-                <p className="mt-1 text-lg leading-snug text-ink sm:text-xl">{data.outlook.headline}</p>
+            <p className="font-display text-[clamp(26px,5vw,44px)] font-black uppercase leading-[1.05] text-ink">
+              {data.outlook.headline}
+            </p>
+            <div className="mt-6 grid gap-6 sm:grid-cols-2">
+              <div>
+                <p className="mb-2 font-bill text-[11px] uppercase tracking-wide text-ok">▼ Going down</p>
+                <div className="space-y-3">
+                  {data.outlook.decreasing.map((x) => (
+                    <div key={x.item} className="border-t border-dotted border-rule pt-2 first:border-t-0 first:pt-0">
+                      <p className="text-sm font-medium text-ink">{x.item}</p>
+                      <p className="text-sm text-ink-soft">{x.detail}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {data.outlook.decreasing.map((x) => (
-                <div key={x.item} className="rounded-2xl bg-white/70 p-4 ring-1 ring-black/5">
-                  <p className="text-sm font-medium" style={{ color: "#006300" }}>▼ Going down · {x.item}</p>
-                  <p className="mt-1 text-sm text-ink-2">{x.detail}</p>
+              <div>
+                <p className="mb-2 font-bill text-[11px] uppercase tracking-wide text-ac">▲ Going up</p>
+                <div className="space-y-3">
+                  {data.outlook.increasing.map((x) => (
+                    <div key={x.item} className="border-t border-dotted border-rule pt-2 first:border-t-0 first:pt-0">
+                      <p className="text-sm font-medium text-ink">{x.item}</p>
+                      <p className="text-sm text-ink-soft">{x.detail}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              {data.outlook.increasing.map((x) => (
-                <div key={x.item} className="rounded-2xl bg-white/70 p-4 ring-1 ring-black/5">
-                  <p className="text-sm font-medium" style={{ color: "#b07800" }}>▲ Going up · {x.item}</p>
-                  <p className="mt-1 text-sm text-ink-2">{x.detail}</p>
-                </div>
-              ))}
+              </div>
             </div>
           </Card>
 
           {view === "days" ? (
             <>
               <Card delay={60} className="lg:col-span-3" title="Next 14 days" subtitle="Tap a day for details">
-                <div className="scroll-thin -mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
-                  {data.next_days.map((d, i) => (
-                    <button
-                      key={d.date}
-                      onClick={() => setDayIdx(i)}
-                      style={{ animationDelay: `${i * 30}ms` }}
-                      className={`animate-fade-up min-w-[92px] rounded-2xl p-3 text-center transition-all duration-200 ${
-                        i === dayIdx ? "bg-ink text-white shadow-lg" : "bg-white/70 ring-1 ring-black/5 hover:-translate-y-0.5 hover:bg-white"
-                      }`}
-                    >
-                      <p className={`text-xs ${i === dayIdx ? "text-white/70" : "text-ink-3"}`}>{i === 0 ? "Tomorrow" : d.weekday}</p>
-                      <p className={`text-[11px] ${i === dayIdx ? "text-white/60" : "text-ink-3"}`}>{fmtDay(d.date)}</p>
-                      <p className="my-1.5 text-3xl" aria-label={d.condition}>{WEATHER_EMOJI[d.icon]}</p>
-                      <p className="text-sm font-medium">{Math.round(d.temp_max_c)}° <span className={i === dayIdx ? "text-white/60" : "text-ink-3"}>{Math.round(d.temp_min_c)}°</span></p>
-                      <p className={`mt-0.5 text-[11px] ${i === dayIdx ? "text-white/70" : "text-ink-3"}`}>💧 {d.rain_chance_pct ?? 0}%</p>
-                    </button>
-                  ))}
-                </div>
+                <DayTiles days={data.next_days} selected={dayIdx} onSelect={setDayIdx} />
                 <div className="mt-4 rounded-2xl bg-white/50 p-4 ring-1 ring-black/5">
                   <DayDetail d={data.next_days[dayIdx]} />
                 </div>
@@ -147,11 +176,21 @@ export default function ForecastPage() {
             </>
           ) : (
             <>
-              <Card delay={60} className="lg:col-span-2" title="Units by month" subtitle="Click a month · base load vs estimated AC">
-                <YearUsageChart months={data.outlook.months} selected={monthIdx} onSelect={setMonthIdx} />
+              <Card
+                delay={60}
+                className="lg:col-span-2"
+                title="Units by month"
+                subtitle="Click a month · blue bars = predicted kWh, orange line = temperature"
+                action={<Tabs size="sm" options={MONTH_OPTIONS} value={monthsParam} onChange={changeMonths} />}
+              >
+                <YearTape months={data.outlook.months} selected={monthIdx} onSelect={setMonthIdx} />
               </Card>
               <Card delay={100}>
                 <MonthDetail m={data.outlook.months[monthIdx]} />
+              </Card>
+
+              <Card delay={120} className="lg:col-span-3" title="Base load vs AC (est.)" subtitle="Same months · click to select">
+                <YearUsageChart months={data.outlook.months} selected={monthIdx} onSelect={setMonthIdx} />
               </Card>
 
               <Card delay={140} className="lg:col-span-2" title="Temperature range" subtitle="Average low → average high · click a month">
@@ -162,40 +201,67 @@ export default function ForecastPage() {
               </Card>
 
               {data.year && (
-                <Card delay={220} className="lg:col-span-3" title="The year ahead" subtitle={`Forecast ${data.year.weather_basis.seasonal_forecast} · typical year ${data.year.weather_basis.mostly_normals}`}>
-                  <p className="text-sm leading-relaxed text-ink-2">{data.year.summary}</p>
-                  <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <Stat label="Total units"><AnimatedNumber value={data.year.total_kwh} /></Stat>
-                    <Stat label="Total energy charge"><AnimatedNumber value={data.year.total_bill} format={fmtRs} /></Stat>
-                    <Stat label="Cheapest month" hint={fmtRs(data.year.cheapest_month.predicted_bill)}>{data.year.cheapest_month.month}</Stat>
-                    <Stat label="Most expensive" hint={fmtRs(data.year.most_expensive_month.predicted_bill)}>{data.year.most_expensive_month.month}</Stat>
+                <Card
+                  delay={220}
+                  className="lg:col-span-3"
+                  title="The year ahead"
+                  subtitle={`Forecast ${data.year.weather_basis.seasonal_forecast} · typical year ${data.year.weather_basis.mostly_normals}`}
+                  hover={false}
+                >
+                  <p className="text-sm leading-relaxed text-ink-soft">{data.year.summary}</p>
+                  <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 border-y-2 border-dotted border-rule py-3 font-bill text-[11px] uppercase tracking-wide">
+                    <p><span className="text-ink-soft">Total units</span> <span className="text-ink">{fmtNum(data.year.total_kwh)}</span></p>
+                    <p><span className="text-ink-soft">Total energy charge</span> <span className="text-ink">{fmtRs(data.year.total_bill)}</span></p>
+                    <p><span className="text-ink-soft">Cheapest</span> <span className="text-ink">{data.year.cheapest_month.month} · {fmtRs(data.year.cheapest_month.predicted_bill)}</span></p>
+                    <p><span className="text-ink-soft">Most expensive</span> <span className="text-ink">{data.year.most_expensive_month.month} · {fmtRs(data.year.most_expensive_month.predicted_bill)}</span></p>
                   </div>
-                  <p className="mt-4 text-xs text-ink-3">Warming trend: {data.year.weather_basis.warming_trend}</p>
+                  <p className="mt-3 text-xs text-ink-3">Warming trend: {data.year.weather_basis.warming_trend}</p>
                 </Card>
               )}
             </>
           )}
 
-          <Card delay={260} className="lg:col-span-3" title="Suggestions" subtitle="Rule-based, from your data and the weather">
+          {/* Advisories (dashboard-design.md §6.4) */}
+          <Card
+            delay={260}
+            className="lg:col-span-3"
+            title="Suggestions"
+            subtitle="Rule-based, from your data and the weather"
+            action={
+              data.suggestions.length > 4 && (
+                <button
+                  onClick={() => setShowAllTips((v) => !v)}
+                  className="font-bill text-[11px] uppercase tracking-wide text-ink-soft hover:text-ink"
+                >
+                  {showAllTips ? "Show less" : "Show all"}
+                </button>
+              )
+            }
+          >
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {data.suggestions.map((s, i) => (
-                <li key={i} className="flex gap-3 rounded-2xl bg-white/70 p-3 text-sm text-ink-2 ring-1 ring-black/5 animate-fade-up" style={{ animationDelay: `${300 + i * 50}ms` }}>
-                  <span aria-hidden className="text-lg">{SUGGESTION_ICON[s.type] ?? "💡"}</span>
-                  <span>{s.message}</span>
-                </li>
-              ))}
+              {(showAllTips ? data.suggestions : data.suggestions.slice(0, 4)).map((s, i) => {
+                const stamp = stampFor(s.type);
+                return (
+                  <li
+                    key={i}
+                    className="animate-fade-up rounded-md border border-ink/20 p-3"
+                    style={{ animationDelay: `${i * 40}ms` }}
+                  >
+                    <Stamp tone={stamp.tone} className="text-[9px]">{stamp.label}</Stamp>
+                    <p className="mt-2 text-sm leading-relaxed text-ink-soft">{s.message}</p>
+                  </li>
+                );
+              })}
             </ul>
           </Card>
 
           <Card delay={300} className="lg:col-span-3" title="How the forecast works" hover={false}>
-            <div className="grid gap-4 sm:grid-cols-4">
-              <Stat label="Model">{data.model.formula}</Stat>
-              <Stat label="Base use" hint="fridge, fans, lights">{fmtNum(data.model.base_kwh_per_day, 1)} kWh/day</Stat>
-              <Stat label="Per degree above 24 °C" hint="mostly AC">+{fmtNum(data.model.kwh_per_degree, 2)} kWh</Stat>
-              <Stat label="Fit (R²)" hint={`${data.model.training_days} days of your data`}>{fmtNum(data.model.r2, 2)}</Stat>
+            <div className="mx-auto max-w-sm">
+              <CalibrationPlate model={data.model} />
             </div>
             <p className="mt-4 text-xs text-ink-3">
-              {data.model.note} AC values are estimates from the temperature pattern; the clamp measures total use. Energy charge only, excluding taxes and fuel adjustment.
+              Fit on {data.model.training_days} days of your data. {data.model.note} AC values are estimates from the
+              temperature pattern; the clamp measures total use. Energy charge only, excluding taxes and fuel adjustment.
             </p>
           </Card>
         </div>

@@ -151,6 +151,19 @@ body::before {
 .live-dot[data-state="stale"] { background: var(--ink-3); }
 .live-dot[data-state="stale"]::after { display: none; }
 
+/* Standalone ping ring (reuses the ping-soft keyframe above), for the monitor's
+   live tip dot (components/meter/Monitor.js) where it's drawn as its own SVG
+   circle rather than a ::after pseudo-element. */
+.animate-ping-soft {
+  animation: ping-soft 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Glow on the monitor's trace line (dashboard-design.md §4.1). Scoped to the
+   wrapper so it never leaks onto other Recharts instances on the page. */
+.trace-glow .recharts-area-curve {
+  filter: drop-shadow(0 0 5px var(--trace-glow));
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -187,6 +200,23 @@ body::before {
   /* Faint grain so the paper isn't a flat fill. Inline SVG: no image download. */
   background-color: var(--paper);
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='0.07'/></svg>");
+
+  /* Meter room (dashboard-design.md §2): dark instrument faces on the paper page.
+     Scoped here, not :root, for the same reason as --paper above. */
+  --screen: #121417;
+  --screen-grid: #26302c;
+  --screen-text: #d9e1dc;
+  --trace: #4c95ea;
+  --trace-glow: rgba(76, 149, 234, 0.35);
+
+  --lamp-green: #3fbf6e;
+  --lamp-amber: #f2a93b;
+  --lamp-red: #e5484d;
+  --lamp-off: #3a3d42;
+
+  --breaker-body: #2a2c30;
+  --breaker-on: #eb6834;
+  --breaker-off: #6b6f76;
 }
 
 /* The dashboard paints fixed gradient blobs on body::before and a --page
@@ -207,6 +237,18 @@ body:has([data-surface="paper"])::before {
   --color-ok: var(--ok-green);
   --color-usage: var(--usage-blue);
   --color-ac: var(--ac-orange);
+
+  --color-screen: var(--screen);
+  --color-screen-grid: var(--screen-grid);
+  --color-screen-text: var(--screen-text);
+  --color-trace: var(--trace);
+  --color-lamp-green: var(--lamp-green);
+  --color-lamp-amber: var(--lamp-amber);
+  --color-lamp-red: var(--lamp-red);
+  --color-lamp-off: var(--lamp-off);
+  --color-breaker-body: var(--breaker-body);
+  --color-breaker-on: var(--breaker-on);
+  --color-breaker-off: var(--breaker-off);
 
   /* The next/font variables are --f-*; the theme keys are --font-*, so the two
      never shadow each other. */
@@ -307,12 +349,87 @@ body:has([data-surface="paper"])::before {
   border-color: var(--ink-soft);
   outline-color: var(--ink-soft);
 }
+.stamp-blue {
+  color: var(--usage-blue);
+  border-color: var(--usage-blue);
+  outline-color: var(--usage-blue);
+}
 
 /* Auth page's bill panel (login-design.md §3/§4.3): --paper-dark with the
    same faint grain as the paper surface, reused rather than duplicated. */
 .bg-paper-grain {
   background-color: var(--paper-dark);
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='0.07'/></svg>");
+}
+
+/* Breaker handle flip (dashboard-design.md §3/§10): 180ms with a slight
+   overshoot past the resting position, used by components/meter/BreakerNav.js. */
+@keyframes breaker-flip-on {
+  0% { transform: translateY(0); }
+  60% { transform: translateY(-3px); }
+  100% { transform: translateY(-2px); }
+}
+@keyframes breaker-flip-off {
+  0% { transform: translateY(-2px); }
+  60% { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
+.breaker-handle-on { animation: breaker-flip-on 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.breaker-handle-off { animation: breaker-flip-off 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* Units counter digit drum (dashboard-design.md §4.3): each digit is its own
+   dark drum; components/meter/UnitsCounter.js keys a changed digit so React
+   remounts it and replays the roll. */
+.meter-digit {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.9rem;
+  height: 2.7rem;
+  padding: 0 0.15rem;
+  border-radius: 4px;
+  background: var(--screen);
+  color: var(--paper);
+  font-size: 1.5rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 4px 5px rgba(0, 0, 0, 0.55), inset 0 -4px 5px rgba(0, 0, 0, 0.55);
+}
+@keyframes digit-roll-in {
+  from { transform: translateY(55%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-digit-roll {
+  animation: digit-roll-in 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Alert ticker slide-in (dashboard-design.md §4.5/§10). */
+@keyframes ticker-slide-down {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-ticker-slide {
+  animation: ticker-slide-down 0.25s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Status light blink on state change, twice, then steady (dashboard-design.md
+   §4.5): components/meter/StatusLights.js keys the dot by state so React
+   remounts (and replays this) only when the state actually changes. */
+@keyframes lamp-blink {
+  0%, 100% { opacity: 1; }
+  25%, 75% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+.animate-lamp-blink {
+  animation: lamp-blink 0.4s steps(1, end) 1;
+}
+
+/* Strip-chart "feed" on tab change (dashboard-design.md §5.1/§10). */
+@keyframes strip-feed {
+  from { transform: translateX(14px); opacity: 0.4; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-strip-feed {
+  animation: strip-feed 0.25s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 /* Field shake on validation error (login-design.md §7). */

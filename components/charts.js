@@ -1,18 +1,7 @@
 "use client";
 
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { fmtDay, fmtNum, fmtRs, fmtTime, hourLabel } from "@/lib/format";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { fmtDay, fmtNum, fmtRs } from "@/lib/format";
 
 // Chart roles (see globals.css; validated reference palette, light mode).
 const C = {
@@ -60,111 +49,6 @@ function Legend({ items }) {
         </span>
       ))}
     </div>
-  );
-}
-
-// ---------- Live power (last ~10 minutes) ----------
-export function LivePowerChart({ points, height = 140 }) {
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={points} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="liveFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={C.s1} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={C.s1} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <XAxis dataKey="ts" hide />
-        <YAxis hide domain={[0, (max) => Math.max(100, max * 1.2)]} />
-        <Tooltip
-          cursor={{ stroke: C.axis, strokeDasharray: "3 3" }}
-          content={({ active, payload }) =>
-            active && payload?.length ? (
-              <TooltipBox
-                title={fmtTime(payload[0].payload.ts)}
-                rows={[
-                  { label: "Power", value: `${fmtNum(payload[0].payload.power_w)} W` },
-                  { label: "Current", value: `${fmtNum(payload[0].payload.current_a, 2)} A` },
-                ]}
-              />
-            ) : null
-          }
-        />
-        <Area
-          type="monotone"
-          dataKey="power_w"
-          stroke={C.s1}
-          strokeWidth={2}
-          fill="url(#liveFill)"
-          isAnimationActive={false}
-          activeDot={{ r: 4, stroke: "#fff", strokeWidth: 2 }}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-}
-
-// ---------- Usage history (kWh per hour or per day) ----------
-export function UsageBars({ points, unit, height = 260 }) {
-  const data = points.map((p) => ({
-    ...p,
-    label: unit === "hour" ? hourLabel(Number(p.bucket.slice(11, 13))) : fmtDay(p.bucket),
-  }));
-  const max = Math.max(...data.map((d) => d.kwh ?? 0));
-
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 8, right: 4, left: -8, bottom: 0 }} barCategoryGap="18%">
-        <CartesianGrid vertical={false} stroke={C.grid} />
-        <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" minTickGap={14} />
-        <YAxis {...axisProps} width={48} tickFormatter={yTick(max)} />
-        <Tooltip
-          cursor={{ fill: "rgba(20,22,26,0.04)" }}
-          content={({ active, payload }) =>
-            active && payload?.length ? (
-              <TooltipBox
-                title={unit === "hour" ? `${payload[0].payload.bucket.slice(0, 10)} · ${payload[0].payload.label}` : payload[0].payload.bucket}
-                rows={[{ label: "Energy", value: payload[0].payload.kwh == null ? "not yet" : `${fmtNum(payload[0].payload.kwh, 2)} kWh` }]}
-              />
-            ) : null
-          }
-        />
-        <Bar dataKey="kwh" fill={C.s1} radius={[4, 4, 0, 0]} animationDuration={700} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
-
-// ---------- Peak hours (24 bars, top 3 emphasised) ----------
-export function PeakHoursChart({ hours, top, height = 240 }) {
-  const data = hours.map((h) => ({ ...h, label: hourLabel(h.hour), peak: top.includes(h.hour) }));
-  return (
-    <>
-      <Legend items={[{ label: "Peak hour (top 3)", color: C.s1 }, { label: "Other hours", color: C.s1Soft }]} />
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} margin={{ top: 8, right: 4, left: -18, bottom: 0 }} barCategoryGap="14%">
-          <CartesianGrid vertical={false} stroke={C.grid} />
-          <XAxis dataKey="label" {...axisProps} interval={2} />
-          <YAxis {...axisProps} width={48} tickFormatter={yTick(2000)} />
-          <Tooltip
-            cursor={{ fill: "rgba(20,22,26,0.04)" }}
-            content={({ active, payload }) =>
-              active && payload?.length ? (
-                <TooltipBox
-                  title={`${payload[0].payload.label}${payload[0].payload.peak ? " · peak" : ""}`}
-                  rows={[{ label: "Average power", value: `${fmtNum(payload[0].payload.avg_power_w)} W` }]}
-                />
-              ) : null
-            }
-          />
-          <Bar dataKey="avg_power_w" radius={[4, 4, 0, 0]} animationDuration={800}>
-            {data.map((d) => (
-              <Cell key={d.hour} fill={d.peak ? C.s1 : C.s1Soft} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </>
   );
 }
 
