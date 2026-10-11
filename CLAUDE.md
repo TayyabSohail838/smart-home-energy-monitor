@@ -128,7 +128,7 @@ user_settings (
 
 One device per user: enforce with a unique index on `devices.user_id` (where not null).
 
-Tariff rates are not hard-coded anywhere. They live in `tariff_slabs` and are filled from the current residential tariff on a real bill.
+Tariff rates are not hard-coded in code. They live in `tariff_slabs`, loaded from `supabase/tariff.sql`: NEPRA SRO 279(I)/2026 unprotected residential rates (same for FESCO/Faisalabad). Replace them with a real bill's rates if they differ.
 
 ## API contracts
 
@@ -147,7 +147,7 @@ Tariff rates are not hard-coded anywhere. They live in `tariff_slabs` and are fi
 
 ### `GET /api/stats/summary`
 
-Returns `{ today_kwh, month_kwh, bill_so_far, current_slab, units_to_next_slab, projected_month_kwh, projected_slab }`.
+Returns `{ today_kwh, month_kwh, bill_so_far, current_slab, units_to_next_slab, projected_month_kwh, projected_bill, projected_slab, days_passed, days_in_month, slab_mode, currency, excludes_taxes: true }`.
 
 ### `GET /api/stats/history?range=day|week|month|30d`
 
@@ -181,8 +181,8 @@ All user-facing routes get the user from the Supabase session and return `401` i
 
 **Bill estimate:**
 1. Month kWh = sum of this month's `energy_wh / 1000` (Asia/Karachi calendar month).
-2. Price it with `tariff_slabs`. Keep the pricing function in `lib/bill.js` and make the slab calculation mode a single, clearly named option, since tariff rules change.
-3. Projection = month kWh ÷ days passed × days in month.
+2. Price it with `tariff_slabs`. Keep the pricing function in `lib/bill.js`; the mode is the single option `SLAB_MODE`: `single_rate` (all units at the rate of the slab the total falls in; unprotected, the default) or `tiered` (each slab at its own rate).
+3. Projection = month kWh ÷ days passed × days in month (days passed is fractional, in Karachi time).
 4. Slab warning when the projection crosses into a higher slab. At most once per slab per month.
 5. Energy charge only. Taxes, fuel adjustment and fixed charges are excluded, and the API response should say so (`excludes_taxes: true`).
 
