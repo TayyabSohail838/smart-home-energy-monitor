@@ -233,6 +233,7 @@ All user-facing routes get the user from the Supabase session and return `401` i
 2. Price it with `tariff_slabs`. Keep the pricing function in `lib/bill.js`; the mode is the single option `SLAB_MODE`: `single_rate` (all units at the rate of the slab the total falls in; unprotected, the default) or `tiered` (each slab at its own rate).
 3. Projection = month kWh ÷ days passed × days in month (days passed is fractional, in Karachi time).
 4. Slab warning when the projection crosses into a higher slab. At most once per slab per month.
+   Also a near-limit warning when the units used so far come within 10 of the slab's upper limit (90, 190, 290, …), saying how much the bill jumps at the next unit. At most once per slab per month (key: "Unit N moves you" in the message). Both use alert type `slab_warning` and the user's email-alerts setting.
 5. Energy charge only. Taxes, fuel adjustment and fixed charges are excluded, and the API response should say so (`excludes_taxes: true`).
 
 **Usage forecast (weather-based):**
