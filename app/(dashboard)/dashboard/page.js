@@ -11,6 +11,7 @@ import SlabDial from "@/components/meter/SlabDial";
 import StatusLights from "@/components/meter/StatusLights";
 import StripChart from "@/components/meter/StripChart";
 import UnitsCounter from "@/components/meter/UnitsCounter";
+import VoltageMonitor from "@/components/meter/VoltageMonitor";
 import { useDevice } from "@/components/Shell";
 import { ErrorNote } from "@/components/ui";
 import { fmtNum, hourLabel, WEATHER_EMOJI } from "@/lib/format";
@@ -88,6 +89,7 @@ export default function OverviewPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <div className="order-2 min-w-0 flex-1 lg:order-1">
           <Monitor deviceId={device.id} alerts={alerts.data?.alerts} onReading={onReading} onStats={setMonitorStats} />
+          <VoltageMonitor />
         </div>
         <div className="order-1 lg:order-2 lg:w-60 lg:shrink-0">
           <StatusLights

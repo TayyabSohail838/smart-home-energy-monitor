@@ -5,9 +5,9 @@
 // Arduino libraries: "PZEM-004T-v30" by Jakub Mandula (ESP32 core includes WiFi/HTTPClient).
 //
 // Body sent (one reading, or an array when catching up after Wi-Fi drops):
-//   { device_id, ts, current_a, power_w, energy_wh }
+//   { device_id, ts, current_a, power_w, energy_wh, voltage_v }
 // energy_wh is the energy in this window (power x elapsed time), as the API expects.
-// The PZEM's voltage is not sent: voltage tracking is out of scope.
+// voltage_v is the mains voltage; the server emails an alert above 250 V.
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -19,11 +19,12 @@
 #define PZEM_RX_PIN 16  // ESP32 pin that receives from PZEM TX
 #define PZEM_TX_PIN 17  // ESP32 pin that sends to PZEM RX
 
-// TEST MODE: while the PZEM has no mains power (no reading), send a made-up 30-65 W
-// value so the dashboard shows the ESP32 -> Wi-Fi -> server path working. Real PZEM
-// readings always win. Set to false before the real demo.
+// TEST MODE: while the PZEM has no mains power (no reading), send a made-up 30-65 W,
+// 225-235 V value so the dashboard shows the ESP32 -> Wi-Fi -> server path working.
+// Real PZEM readings always win. Set to false before the real demo.
 #define TEST_MODE true
-const float TEST_MIN_W = 30, TEST_MAX_W = 65, TEST_VOLTS = 230;  // like a laptop charging
+const float TEST_MIN_W = 30, TEST_MAX_W = 65;    // like a laptop charging
+const float TEST_MIN_V = 225, TEST_MAX_V = 235;  // normal Pakistani mains
 
 const uint32_t INTERVAL_MS = 10000;
 const int MAX_BACKLOG = 60;  // 10 minutes of readings kept while offline
@@ -33,7 +34,7 @@ PZEM004Tv30 pzem(Serial2, PZEM_RX_PIN, PZEM_TX_PIN);
 
 struct Reading {
   time_t ts;
-  float current_a, power_w, energy_wh;
+  float current_a, power_w, energy_wh, voltage_v;
 };
 Reading backlog[MAX_BACKLOG];
 int backlogCount = 0;
@@ -59,6 +60,8 @@ void isoTime(time_t t, char *out, size_t len) {
   strftime(out, len, "%Y-%m-%dT%H:%M:%SZ", &utc);
 }
 
+float randomBetween(float lo, float hi) { return lo + (hi - lo) * (esp_random() / 4294967295.0f); }
+
 void addToBacklog(const Reading &r) {
   if (backlogCount == MAX_BACKLOG) {  // full: drop the oldest
     memmove(backlog, backlog + 1, sizeof(Reading) * (MAX_BACKLOG - 1));
@@ -76,10 +79,11 @@ bool sendBacklog() {
   char ts[25];
   for (int i = 0; i < n; i++) {
     isoTime(backlog[i].ts, ts, sizeof(ts));
-    char item[220];
+    char item[260];
     snprintf(item, sizeof(item),
-             "%s{\"device_id\":\"%s\",\"ts\":\"%s\",\"current_a\":%.3f,\"power_w\":%.1f,\"energy_wh\":%.4f}",
-             i ? "," : "", DEVICE_ID, ts, backlog[i].current_a, backlog[i].power_w, backlog[i].energy_wh);
+             "%s{\"device_id\":\"%s\",\"ts\":\"%s\",\"current_a\":%.3f,\"power_w\":%.1f,\"energy_wh\":%.4f,\"voltage_v\":%.1f}",
+             i ? "," : "", DEVICE_ID, ts, backlog[i].current_a, backlog[i].power_w, backlog[i].energy_wh,
+             backlog[i].voltage_v);
     body += item;
   }
   body += "]";
@@ -125,19 +129,24 @@ void loop() {
 
     float current = pzem.current();
     float power = pzem.power();
+    float voltage = pzem.voltage();
+    bool noReading = isnan(current) || isnan(power) || isnan(voltage);
     bool test = false;
-    if ((isnan(current) || isnan(power)) && TEST_MODE) {
-      power = TEST_MIN_W + (TEST_MAX_W - TEST_MIN_W) * (esp_random() / 4294967295.0f);
-      current = power / TEST_VOLTS;
+    if (noReading && TEST_MODE) {
+      power = randomBetween(TEST_MIN_W, TEST_MAX_W);
+      voltage = randomBetween(TEST_MIN_V, TEST_MAX_V);
+      current = power / voltage;
       test = true;
+      noReading = false;
     }
-    if (isnan(current) || isnan(power)) {
+    if (noReading) {
       Serial.println("PZEM: no reading (check wiring and that the PZEM has mains power)");
     } else if (!clockReady()) {
       Serial.println("Waiting for internet time before sending...");
     } else {
-      Reading r = {time(nullptr), current, power, power * elapsedS / 3600.0f};
-      Serial.printf("%s%.3f A  %.1f W  %.4f Wh\n", test ? "TEST (no PZEM reading): " : "", r.current_a, r.power_w, r.energy_wh);
+      Reading r = {time(nullptr), current, power, power * elapsedS / 3600.0f, voltage};
+      Serial.printf("%s%.1f V  %.3f A  %.1f W  %.4f Wh\n", test ? "TEST (no PZEM reading): " : "",
+                    r.voltage_v, r.current_a, r.power_w, r.energy_wh);
       addToBacklog(r);
     }
     // Catch up a few batches per cycle after an outage.

@@ -22,6 +22,7 @@ function dayLabel(key, now) {
 const STAMP = {
   anomaly: { label: "SPIKE", emoji: "🔴" },
   slab_warning: { label: "SLAB", emoji: "🟠" },
+  voltage: { label: "VOLTAGE", emoji: "⚡" },
 };
 
 // The alert logbook (dashboard-design.md §7.2): lined paper with a red
