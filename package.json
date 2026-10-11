@@ -20,6 +20,7 @@
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "recharts": "^3.10.1",
     "resend": "^6.32.1"
   },
   "devDependencies": {
