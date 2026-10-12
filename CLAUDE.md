@@ -97,7 +97,8 @@ app/(dashboard)/layout.js      # sidebar shell for the pages below (instant = fa
 app/(dashboard)/page.js        # Overview: live power (Realtime), bill, slab meter, today, weather, peak hours
 app/(dashboard)/usage/page.js  # history tabs (day/week/month/30d) + table view, peak-hours chart
 app/(dashboard)/forecast/...   # 14-day and 12-month views, outlook, suggestions, model
-app/(dashboard)/alerts/...     # alert timeline + email settings
+app/(dashboard)/alerts/...     # alert timeline
+app/(dashboard)/settings/page.js # email alerts on/off + address (sidebar Settings)
 components/                    # Shell (sidebar, user+device context), charts, ui, LivePanel, SlabMeter, AlertBanner
 lib/supabase/client.js         # browser client (anon key only)
 lib/useApi.js, lib/useNow.js   # fetch our routes (401 -> /login, no device -> /link); pure clock
