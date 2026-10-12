@@ -26,6 +26,8 @@ try {
     $b = Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus | Select-Object -First 1
     if ($b.PowerOnline) {
       Write-Host "Charger is plugged in: unplug it so the battery sensor can measure the laptop."
+    } elseif ($b.DischargeRate -le 0) {
+      Write-Host "Battery sensor settling (reads 0 W just after unplugging): waiting..."
     } else {
       $watts = [math]::Round($b.DischargeRate / 1000, 1)   # mW -> W
       $serial.WriteLine("W $watts")

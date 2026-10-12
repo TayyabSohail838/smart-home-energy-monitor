@@ -63,7 +63,7 @@ function MonitorTooltip({ active, payload }) {
   const p = payload[0].payload;
   return (
     <div className="rounded-md bg-screen px-2.5 py-1.5 font-bill text-[11px] text-screen-text shadow-lg ring-1 ring-white/10">
-      {fmtTime(p.ts)} · {fmtNum(p.y)} W
+      {fmtTime(p.ts)} · {p.y == null ? "no data" : `${fmtNum(p.y)} W`}
     </div>
   );
 }
@@ -258,7 +258,8 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
       (a) => a.type === "anomaly" && Date.parse(a.ts) >= domain[0] && Date.parse(a.ts) <= domain[1]
     );
   }, [alerts, domain]);
-  const avgDisplay = chartData.length ? chartData.reduce((s, d) => s + d.y, 0) / chartData.length : null;
+  const measured = chartData.filter((d) => d.y != null); // gap markers carry y = null
+  const avgDisplay = measured.length ? measured.reduce((s, d) => s + d.y, 0) / measured.length : null;
   const nowW = latest?.power_w ?? chartData.at(-1)?.y ?? null;
   const lastReadingTs = latest?.ts ?? chartData.at(-1)?.ts ?? null;
   const live = Boolean(latest && now && now - Date.parse(latest.ts) < STALE_MS);
@@ -327,6 +328,7 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
                 strokeWidth={2}
                 fill="url(#traceFill)"
                 isAnimationActive={false}
+                connectNulls={false}
                 dot={false}
                 activeDot={{ r: 3, fill: "var(--trace)", stroke: "var(--screen)" }}
               />
