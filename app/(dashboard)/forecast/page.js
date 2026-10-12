@@ -7,7 +7,7 @@ import CalibrationPlate from "@/components/meter/CalibrationPlate";
 import DayTiles from "@/components/meter/DayTiles";
 import YearTape from "@/components/meter/YearTape";
 import PageHeader from "@/components/PageHeader";
-import { Badge, Card, ErrorNote, Skeleton, Stat, Tabs } from "@/components/ui";
+import { Badge, ErrorNote, Skeleton, Tabs } from "@/components/ui";
 import { fmtNum, fmtRs, WEATHER_EMOJI } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
@@ -32,17 +32,47 @@ function stampFor(type) {
   return { label: "ADVISORY", tone: "ink" };
 }
 
+// Paper panel (dashboard-design.md's bordered boxed-panel idiom, used across
+// the reskinned pages) in place of the pre-reskin glass Card.
+function Panel({ title, subtitle, action, children, className = "", delay = 0 }) {
+  return (
+    <section className={`animate-fade-up rounded-md border border-ink/15 p-5 ${className}`} style={{ animationDelay: `${delay}ms` }}>
+      {(title || action) && (
+        <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            {title && <p className="font-bill text-[11px] uppercase tracking-wide text-ink-soft">{title}</p>}
+            {subtitle && <p className="mt-0.5 text-xs text-ink-soft">{subtitle}</p>}
+          </div>
+          {action}
+        </header>
+      )}
+      {children}
+    </section>
+  );
+}
+
+// Label/value block, the paper-surface equivalent of ui.js's glass-styled Stat.
+function Fact({ label, children, hint }) {
+  return (
+    <div>
+      <p className="font-bill text-[10px] uppercase tracking-wide text-ink-soft">{label}</p>
+      <p className="mt-1 font-bill text-sm text-ink">{children}</p>
+      {hint && <p className="mt-0.5 text-[11px] text-ink-soft">{hint}</p>}
+    </div>
+  );
+}
+
 function DayDetail({ d }) {
   return (
     <div key={d.date} className="animate-fade-up grid grid-cols-2 gap-4 sm:grid-cols-4">
-      <Stat label="Sky">{WEATHER_EMOJI[d.icon]} {d.condition}</Stat>
-      <Stat label="High / low">{fmtNum(d.temp_max_c, 1)}° / {fmtNum(d.temp_min_c, 1)}°</Stat>
-      <Stat label="Rain">{d.rain_chance_pct ?? "–"}% · {fmtNum(d.rain_mm, 1)} mm</Stat>
-      <Stat label="Predicted use">{fmtNum(d.predicted_kwh, 1)} kWh</Stat>
-      <Stat label="Wind">{fmtNum(d.wind_max_kmh)} km/h</Stat>
-      <Stat label="Humidity">{fmtNum(d.humidity_pct)}%</Stat>
-      <Stat label="Sunrise">{d.sunrise ?? "–"}</Stat>
-      <Stat label="Sunset">{d.sunset ?? "–"}</Stat>
+      <Fact label="Sky">{WEATHER_EMOJI[d.icon]} {d.condition}</Fact>
+      <Fact label="High / low">{fmtNum(d.temp_max_c, 1)}° / {fmtNum(d.temp_min_c, 1)}°</Fact>
+      <Fact label="Rain">{d.rain_chance_pct ?? "–"}% · {fmtNum(d.rain_mm, 1)} mm</Fact>
+      <Fact label="Predicted use">{fmtNum(d.predicted_kwh, 1)} kWh</Fact>
+      <Fact label="Wind">{fmtNum(d.wind_max_kmh)} km/h</Fact>
+      <Fact label="Humidity">{fmtNum(d.humidity_pct)}%</Fact>
+      <Fact label="Sunrise">{d.sunrise ?? "–"}</Fact>
+      <Fact label="Sunset">{d.sunset ?? "–"}</Fact>
     </div>
   );
 }
@@ -52,31 +82,31 @@ function MonthDetail({ m }) {
   return (
     <div key={`${m.month}${m.year}`} className="animate-fade-up">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-xl font-medium">{m.month} {m.year}</h3>
-        <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-medium capitalize text-ink">{m.season}</span>
+        <h3 className="text-xl font-medium text-ink">{m.month} {m.year}</h3>
+        <span className="rounded-sm bg-ink px-2 py-0.5 font-bill text-[10px] uppercase tracking-wide text-paper">{m.season}</span>
         <Badge status={basis.status}>{basis.label}</Badge>
       </div>
-      <p className="mt-1 text-xs text-ink-3">{m.weather_source}</p>
+      <p className="mt-1 text-xs text-ink-soft">{m.weather_source}</p>
 
       <div className="mt-5 grid grid-cols-2 gap-4">
-        <Stat label="Average temperature" hint={m.likely_range_c ? `likely ${m.likely_range_c[0]}–${m.likely_range_c[1]}°` : `normal ${m.normal_temp_c}°`}>
+        <Fact label="Average temperature" hint={m.likely_range_c ? `likely ${m.likely_range_c[0]}–${m.likely_range_c[1]}°` : `normal ${m.normal_temp_c}°`}>
           {fmtNum(m.forecast_temp_c, 1)}°
-        </Stat>
-        <Stat label="vs a normal year">{m.vs_normal_c > 0 ? "+" : ""}{fmtNum(m.vs_normal_c, 1)}°</Stat>
-        <Stat label="Highs / lows">{fmtNum(m.avg_high_c, 0)}° / {fmtNum(m.avg_low_c, 0)}°</Stat>
-        <Stat label="Rain">{fmtNum(m.rain_mm)} mm · {m.rainy_days} days</Stat>
-        <Stat label="Sunset" hint={`${fmtNum(m.daylight_h, 1)} h daylight`}>{m.sunset}</Stat>
-        <Stat label="Units" hint={`AC (est.) ${fmtNum(m.ac_kwh_est)} kWh`}>{fmtNum(m.predicted_kwh)}</Stat>
-        <Stat label="Bill (energy)" hint={`Slab ${m.predicted_slab}`}>{fmtRs(m.predicted_bill)}</Stat>
-        <Stat label="vs this month" hint={m.change_pct == null ? "no usage this month yet" : null}>
+        </Fact>
+        <Fact label="vs a normal year">{m.vs_normal_c > 0 ? "+" : ""}{fmtNum(m.vs_normal_c, 1)}°</Fact>
+        <Fact label="Highs / lows">{fmtNum(m.avg_high_c, 0)}° / {fmtNum(m.avg_low_c, 0)}°</Fact>
+        <Fact label="Rain">{fmtNum(m.rain_mm)} mm · {m.rainy_days} days</Fact>
+        <Fact label="Sunset" hint={`${fmtNum(m.daylight_h, 1)} h daylight`}>{m.sunset}</Fact>
+        <Fact label="Units" hint={`AC (est.) ${fmtNum(m.ac_kwh_est)} kWh`}>{fmtNum(m.predicted_kwh)}</Fact>
+        <Fact label="Bill (energy)" hint={`Slab ${m.predicted_slab}`}>{fmtRs(m.predicted_bill)}</Fact>
+        <Fact label="vs this month" hint={m.change_pct == null ? "no usage this month yet" : null}>
           {m.change_pct == null ? (
-            <span className="text-ink-3">–</span>
+            <span className="text-ink-soft">–</span>
           ) : (
-            <span style={{ color: m.change_pct <= 0 ? "#006300" : "var(--critical)" }}>
+            <span style={{ color: m.change_pct <= 0 ? "var(--ok-green)" : "var(--stamp-red)" }}>
               {m.change_pct <= 0 ? "▼" : "▲"} {fmtNum(Math.abs(m.change_pct))}%
             </span>
           )}
-        </Stat>
+        </Fact>
       </div>
     </div>
   );
@@ -110,9 +140,9 @@ export default function ForecastPage() {
 
       {!data ? (
         <div className="grid gap-5">
-          <Skeleton className="h-28 w-full rounded-3xl" />
-          <Skeleton className="h-64 w-full rounded-3xl" />
-          <p className="text-center text-xs text-ink-3">Fetching weather and seasonal forecast…</p>
+          <Skeleton className="h-28 w-full rounded-md" />
+          <Skeleton className="h-64 w-full rounded-md" />
+          <p className="text-center text-xs text-ink-soft">Fetching weather and seasonal forecast…</p>
         </div>
       ) : calibrating ? (
         <div className="grid gap-5">
@@ -131,7 +161,7 @@ export default function ForecastPage() {
       ) : (
         <div className="grid gap-5 lg:grid-cols-3">
           {/* Outlook board (dashboard-design.md §6.3) */}
-          <Card delay={0} className="lg:col-span-3" hover={false}>
+          <Panel delay={0} className="lg:col-span-3">
             <p className="font-display text-[clamp(26px,5vw,44px)] font-black uppercase leading-[1.05] text-ink">
               {data.outlook.headline}
             </p>
@@ -159,24 +189,24 @@ export default function ForecastPage() {
                 </div>
               </div>
             </div>
-          </Card>
+          </Panel>
 
           {view === "days" ? (
             <>
-              <Card delay={60} className="lg:col-span-3" title="Next 14 days" subtitle="Tap a day for details">
+              <Panel delay={60} className="lg:col-span-3" title="Next 14 days" subtitle="Tap a day for details">
                 <DayTiles days={data.next_days} selected={dayIdx} onSelect={setDayIdx} />
-                <div className="mt-4 rounded-2xl bg-white/50 p-4 ring-1 ring-black/5">
+                <div className="mt-4 rounded-md border border-ink/15 p-4">
                   <DayDetail d={data.next_days[dayIdx]} />
                 </div>
-              </Card>
+              </Panel>
 
-              <Card delay={120} className="lg:col-span-3" title="Predicted use per day" subtitle={`From your model: ${data.model.formula}`}>
+              <Panel delay={120} className="lg:col-span-3" title="Predicted use per day" subtitle={`From your model: ${data.model.formula}`}>
                 <DailyForecastChart days={data.next_days} />
-              </Card>
+              </Panel>
             </>
           ) : (
             <>
-              <Card
+              <Panel
                 delay={60}
                 className="lg:col-span-2"
                 title="Units by month"
@@ -184,29 +214,28 @@ export default function ForecastPage() {
                 action={<Tabs size="sm" options={MONTH_OPTIONS} value={monthsParam} onChange={changeMonths} />}
               >
                 <YearTape months={data.outlook.months} selected={monthIdx} onSelect={setMonthIdx} />
-              </Card>
-              <Card delay={100}>
+              </Panel>
+              <Panel delay={100}>
                 <MonthDetail m={data.outlook.months[monthIdx]} />
-              </Card>
+              </Panel>
 
-              <Card delay={120} className="lg:col-span-3" title="Base load vs AC (est.)" subtitle="Same months · click to select">
+              <Panel delay={120} className="lg:col-span-3" title="Base load vs AC (est.)" subtitle="Same months · click to select">
                 <YearUsageChart months={data.outlook.months} selected={monthIdx} onSelect={setMonthIdx} />
-              </Card>
+              </Panel>
 
-              <Card delay={140} className="lg:col-span-2" title="Temperature range" subtitle="Average low → average high · click a month">
+              <Panel delay={140} className="lg:col-span-2" title="Temperature range" subtitle="Average low → average high · click a month">
                 <TempRangeChart months={data.outlook.months} selected={monthIdx} onSelect={setMonthIdx} />
-              </Card>
-              <Card delay={180} title="Rainfall" subtitle="mm per month">
+              </Panel>
+              <Panel delay={180} title="Rainfall" subtitle="mm per month">
                 <RainChart months={data.outlook.months} />
-              </Card>
+              </Panel>
 
               {data.year && (
-                <Card
+                <Panel
                   delay={220}
                   className="lg:col-span-3"
                   title="The year ahead"
                   subtitle={`Forecast ${data.year.weather_basis.seasonal_forecast} · typical year ${data.year.weather_basis.mostly_normals}`}
-                  hover={false}
                 >
                   <p className="text-sm leading-relaxed text-ink-soft">{data.year.summary}</p>
                   <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 border-y-2 border-dotted border-rule py-3 font-bill text-[11px] uppercase tracking-wide">
@@ -215,14 +244,14 @@ export default function ForecastPage() {
                     <p><span className="text-ink-soft">Cheapest</span> <span className="text-ink">{data.year.cheapest_month.month} · {fmtRs(data.year.cheapest_month.predicted_bill)}</span></p>
                     <p><span className="text-ink-soft">Most expensive</span> <span className="text-ink">{data.year.most_expensive_month.month} · {fmtRs(data.year.most_expensive_month.predicted_bill)}</span></p>
                   </div>
-                  <p className="mt-3 text-xs text-ink-3">Warming trend: {data.year.weather_basis.warming_trend}</p>
-                </Card>
+                  <p className="mt-3 text-xs text-ink-soft">Warming trend: {data.year.weather_basis.warming_trend}</p>
+                </Panel>
               )}
             </>
           )}
 
           {/* Advisories (dashboard-design.md §6.4) */}
-          <Card
+          <Panel
             delay={260}
             className="lg:col-span-3"
             title="Suggestions"
@@ -253,17 +282,17 @@ export default function ForecastPage() {
                 );
               })}
             </ul>
-          </Card>
+          </Panel>
 
-          <Card delay={300} className="lg:col-span-3" title="How the forecast works" hover={false}>
+          <Panel delay={300} className="lg:col-span-3" title="How the forecast works">
             <div className="mx-auto max-w-sm">
               <CalibrationPlate model={data.model} />
             </div>
-            <p className="mt-4 text-xs text-ink-3">
+            <p className="mt-4 text-xs text-ink-soft">
               Fit on {data.model.training_days} days of your data. {data.model.note} AC values are estimates from the
               temperature pattern; the clamp measures total use. Energy charge only, excluding taxes and fuel adjustment.
             </p>
-          </Card>
+          </Panel>
         </div>
       )}
     </>
