@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { DailyForecastChart, RainChart, TempRangeChart, YearUsageChart } from "@/components/charts";
 import Stamp from "@/components/auth/Stamp";
 import CalibrationPlate from "@/components/meter/CalibrationPlate";
 import DayTiles from "@/components/meter/DayTiles";
@@ -16,14 +15,6 @@ const MONTH_OPTIONS = [
   { value: 6, label: "6 MO" },
   { value: 12, label: "12 MO" },
 ];
-
-// Short label for a month's weather_basis, shown as a stamp next to its date
-// in MonthDetail (dashboard-design.md §6.2/§6.3).
-const BASIS_LABEL = {
-  forecast: "Seasonal forecast",
-  mixed: "Partly forecast",
-  normals: "Typical year",
-};
 
 // The first suggestion buildSuggestions() returns is always a recap of
 // this-month-vs-next-month units/Rs/change% - exactly what the answer strip
@@ -206,40 +197,9 @@ function ChangeColumn({ title, toneClass, items, openWhy, onToggleWhy }) {
   );
 }
 
-// The selected month's full detail (dashboard-design.md §6.2/§6.3), kept from
-// the pre-reskin page's MonthDetail card rather than dropped, restyled onto
-// Fact/Stamp instead of the glass Stat/Badge.
-function MonthDetail({ m }) {
-  return (
-    <div className="animate-fade-up">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-display text-xl font-black uppercase leading-none text-ink">{m.month} {m.year}</h3>
-        <span className="rounded-sm bg-paper-dark px-2 py-0.5 font-bill text-[10px] uppercase tracking-wide text-ink-soft">{m.season}</span>
-        <Stamp tone="ink" faint className="text-[9px]">{BASIS_LABEL[m.weather_basis]}</Stamp>
-      </div>
-      <p className="mt-1 text-xs text-ink-soft">{m.weather_source}</p>
-
-      <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Fact label="Average temperature">
-          {fmtNum(m.forecast_temp_c, 1)}°
-          <span className="ml-1 text-xs text-ink-soft">{m.likely_range_c ? `likely ${m.likely_range_c[0]}–${m.likely_range_c[1]}°` : `normal ${m.normal_temp_c}°`}</span>
-        </Fact>
-        <Fact label="vs a normal year">{m.vs_normal_c > 0 ? "+" : ""}{fmtNum(m.vs_normal_c, 1)}°</Fact>
-        <Fact label="Highs / lows">{fmtNum(m.avg_high_c, 0)}° / {fmtNum(m.avg_low_c, 0)}°</Fact>
-        <Fact label="Rain">{fmtNum(m.rain_mm)} mm · {m.rainy_days} days</Fact>
-        <Fact label="Sunset">{m.sunset} <span className="text-xs text-ink-soft">· {fmtNum(m.daylight_h, 1)} h daylight</span></Fact>
-        <Fact label="Units">{fmtNum(m.predicted_kwh)} kWh <span className="text-xs text-ink-soft">· AC (est.) {fmtNum(m.ac_kwh_est)}</span></Fact>
-        <Fact label="Bill (energy)">{fmtRs(m.predicted_bill)} <span className="text-xs text-ink-soft">· slab {m.predicted_slab}</span></Fact>
-        <Fact label="vs this month"><ChangeReadout pct={m.change_pct} /></Fact>
-      </div>
-    </div>
-  );
-}
-
 export default function ForecastPage() {
   const [view, setView] = useState("days");
   const [dayIdx, setDayIdx] = useState(null);
-  const [monthIdx, setMonthIdx] = useState(0);
   const [monthsParam, setMonthsParam] = useState(12);
   const [showAllTips, setShowAllTips] = useState(false);
   const [openWhy, setOpenWhy] = useState(() => new Set());
@@ -260,11 +220,6 @@ export default function ForecastPage() {
       else next.add(item);
       return next;
     });
-  }
-
-  function changeMonths(v) {
-    setMonthsParam(v);
-    setMonthIdx(0);
   }
 
   const tips = data && !calibrating ? data.suggestions.filter((s) => !RECAP_TYPES.has(s.type)) : [];
@@ -308,62 +263,22 @@ export default function ForecastPage() {
           <AnswerStrip data={data} />
 
           {view === "days" ? (
-            <>
-              <Panel title="Next 14 days" subtitle="Tap a day for details">
-                <DayTiles days={data.next_days} selected={dayIdx} onSelect={toggleDay} />
-                {dayIdx != null && (
-                  <div id="day-detail-panel" role="region" aria-label="Day detail" className="mt-4 rounded-md border border-ink/15 p-4">
-                    <DayDetail d={data.next_days[dayIdx]} />
-                  </div>
-                )}
-              </Panel>
-
-              <Panel title="Predicted use per day" subtitle={`From your model: ${data.model.formula}`}>
-                <DailyForecastChart days={data.next_days} />
-              </Panel>
-            </>
-          ) : (
-            <>
-              <Panel
-                title="Units by month"
-                subtitle="Bars = predicted kWh (hatched = typical-year estimate) · line = temperature · click a month for details"
-                action={<Tabs size="sm" options={MONTH_OPTIONS} value={monthsParam} onChange={changeMonths} />}
-              >
-                <YearTape months={data.outlook.months} selected={monthIdx} onSelect={setMonthIdx} height={260} />
-              </Panel>
-
-              <Panel>
-                <MonthDetail m={data.outlook.months[monthIdx]} />
-              </Panel>
-
-              <Panel title="Base load vs AC (est.)" subtitle="Same months · click to select">
-                <YearUsageChart months={data.outlook.months} selected={monthIdx} onSelect={setMonthIdx} />
-              </Panel>
-
-              <Panel title="Temperature range" subtitle="Average low → average high · click a month">
-                <TempRangeChart months={data.outlook.months} selected={monthIdx} onSelect={setMonthIdx} />
-              </Panel>
-
-              <Panel title="Rainfall" subtitle="mm per month">
-                <RainChart months={data.outlook.months} />
-              </Panel>
-
-              {data.year && (
-                <Panel
-                  title="The year ahead"
-                  subtitle={`Forecast ${data.year.weather_basis.seasonal_forecast} · typical year ${data.year.weather_basis.mostly_normals}`}
-                >
-                  <p className="text-sm leading-relaxed text-ink-soft">{data.year.summary}</p>
-                  <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 border-y-2 border-dotted border-rule py-3 font-bill text-[11px] uppercase tracking-wide">
-                    <p><span className="text-ink-soft">Total units</span> <span className="text-ink">{fmtNum(data.year.total_kwh)}</span></p>
-                    <p><span className="text-ink-soft">Total energy charge</span> <span className="text-ink">{fmtRs(data.year.total_bill)}</span></p>
-                    <p><span className="text-ink-soft">Cheapest</span> <span className="text-ink">{data.year.cheapest_month.month} · {fmtRs(data.year.cheapest_month.predicted_bill)}</span></p>
-                    <p><span className="text-ink-soft">Most expensive</span> <span className="text-ink">{data.year.most_expensive_month.month} · {fmtRs(data.year.most_expensive_month.predicted_bill)}</span></p>
-                  </div>
-                  <p className="mt-3 text-xs text-ink-soft">Warming trend: {data.year.weather_basis.warming_trend}</p>
-                </Panel>
+            <Panel title="Next 14 days" subtitle="Tap a day for details">
+              <DayTiles days={data.next_days} selected={dayIdx} onSelect={toggleDay} />
+              {dayIdx != null && (
+                <div id="day-detail-panel" role="region" aria-label="Day detail" className="mt-4 rounded-md border border-ink/15 p-4">
+                  <DayDetail d={data.next_days[dayIdx]} />
+                </div>
               )}
-            </>
+            </Panel>
+          ) : (
+            <Panel
+              title="Units by month"
+              subtitle="Bars = predicted kWh (hatched = typical-year estimate) · line = temperature"
+              action={<Tabs size="sm" options={MONTH_OPTIONS} value={monthsParam} onChange={setMonthsParam} />}
+            >
+              <YearTape months={data.outlook.months} height={260} />
+            </Panel>
           )}
 
           <Panel title="What changes" subtitle="Next 3 months">
