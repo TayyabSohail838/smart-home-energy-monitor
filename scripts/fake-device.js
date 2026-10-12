@@ -30,6 +30,7 @@ async function send() {
     device_id: DEVICE_ID,
     ts: new Date().toISOString(),
     current_a: +(power_w / VOLTAGE).toFixed(3),
+    source: "simulated",
     voltage_v: +(volts + (Math.random() - 0.5) * 2).toFixed(1), // +-1 V noise
     power_w: +power_w.toFixed(1),
     energy_wh: +((power_w * INTERVAL_S) / 3600).toFixed(4),

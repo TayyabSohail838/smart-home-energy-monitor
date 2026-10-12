@@ -8,10 +8,8 @@ import { Skeleton } from "@/components/ui";
 import { useApi } from "@/lib/useApi";
 
 // Settings panel (dashboard-design.md §7.1): the wall switch + alert email.
-// Shared by the Alerts page and the standalone Settings page (BreakerNav
-// links to /settings) so both read from the same save logic instead of two
-// copies drifting apart.
-export default function EmailSettings({ id = "settings" }) {
+// Shown on its own /settings page (the sidebar's Settings breaker).
+export default function EmailSettings() {
   const settings = useApi("/api/settings");
   const [edited, setEdited] = useState(null); // local edits; falls back to the loaded settings
   const form = edited ?? settings.data;
@@ -43,7 +41,7 @@ export default function EmailSettings({ id = "settings" }) {
   }
 
   return (
-    <Panel id={id} title="Email alerts · sent through Resend when an alert fires" className="mb-6">
+    <Panel id="settings" title="Email alerts · sent through Resend when an alert fires" className="mb-6">
       {!form ? (
         <Skeleton className="h-28 w-full" />
       ) : (
@@ -90,3 +88,4 @@ export default function EmailSettings({ id = "settings" }) {
     </Panel>
   );
 }
+

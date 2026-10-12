@@ -1,8 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import Stamp from "@/components/auth/Stamp";
-import EmailSettings from "@/components/meter/EmailSettings";
 import Logbook from "@/components/meter/Logbook";
 import { Panel } from "@/components/meter/Panel";
 import PageHeader from "@/components/PageHeader";
@@ -52,7 +52,9 @@ export default function AlertsPage() {
       </PageHeader>
       <ErrorNote message={alerts.error} onRetry={alerts.reload} />
 
-      <EmailSettings />
+      <p className="mb-6 text-sm text-ink-soft">
+        Email alerts are <Link href="/settings" className="underline underline-offset-2 hover:text-ink">set up in Settings</Link>.
+      </p>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">

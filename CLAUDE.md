@@ -14,10 +14,10 @@ Time is the main constraint. Prefer the simplest thing that works and is easy to
 
 ## Build status
 
-Done: ingestion (`POST /api/readings`, deployed on Vercel), ESP32 firmware (uploaded, online; TEST_MODE until mains is wired), voltage chart + alert, login + device linking, 30-day seed, history, peak hours, slab bill + summary, anomaly detection, alerts + email (Resend), settings, weather forecast (14 days + 12 months), dashboard UI, chatbot code (needs `GEMINI_API_KEY`).
+Done: ingestion (`POST /api/readings`, deployed on Vercel), ESP32 firmware (uploaded, online; laptop demo mode until mains is wired), voltage chart + alert, login + device linking, 30-day seed, history, peak hours, slab bill + summary, anomaly detection, alerts + email (Resend), settings, weather forecast (14 days + 12 months), dashboard UI, chatbot code (needs `GEMINI_API_KEY`).
 
 Remaining:
-1. Hardware: the ESP32 is programmed and sending, but the PZEM has no mains (no electrician), so `TEST_MODE` sends labelled test readings (30–65 W, 225–235 V). When an electrician wires L/N and the CT, set `TEST_MODE false` and re-upload. Run `supabase/voltage.sql` once if not done.
+1. Hardware: the ESP32 is programmed and sending, but the PZEM has no mains (no electrician), so the demo uses real laptop power relayed by the ESP32 (`scripts/laptop-meter.ps1`) with a labelled test voltage (`TEST_VOLTAGE`, 225–235 V); `TEST_POWER` (made-up watts) is off. When an electrician wires L/N and the CT, set `TEST_VOLTAGE false` and re-upload. Run `supabase/voltage.sql` and `supabase/source.sql` once if not done.
 2. Demo prep: re-run `npm run seed` before recording, add `RESEND_API_KEY` / `ALERT_FROM_EMAIL` in Vercel, README.
 3. Optional, only if time remains: load-shedding (outage) prediction from reading gaps — currently Dropped in the design doc.
 
@@ -77,6 +77,7 @@ lib/
 supabase/
   schema.sql                 # tables, indexes, RLS policies
   voltage.sql                # voltage_v column, 'voltage' alert type, voltage_live() (run once on existing DBs)
+  source.sql                 # readings.source column (run once): the dashboard labels real vs test data
 scripts/
   seed.js                    # sample history generator
 firmware/
@@ -142,6 +143,7 @@ readings (
   power_w real not null,
   energy_wh real not null,                   -- energy in this 10 s window
   voltage_v real null,                       -- mains voltage from the PZEM (0-500); null on old/seeded rows
+  source text null,                          -- pzem | laptop | test | simulated; null on old/seeded rows
   is_seeded boolean default false
 )
 -- index on readings (device_id, ts)
@@ -179,9 +181,9 @@ Tariff rates are not hard-coded in code. They live in `tariff_slabs`, loaded fro
 ### `POST /api/readings` (called by the ESP32)
 
 - Header: `x-device-key: <secret>` and the device id in the body or header.
-- Body: `{ "device_id": "...", "ts": "2026-10-11T14:05:10Z", "current_a": 4.82, "power_w": 1109, "energy_wh": 3.08, "voltage_v": 231.4 }` (`voltage_v` optional; an implausible value is dropped, the reading kept)
+- Body: `{ "device_id": "...", "ts": "2026-10-11T14:05:10Z", "current_a": 4.82, "power_w": 1109, "energy_wh": 3.08, "voltage_v": 231.4, "source": "pzem" }` (`voltage_v` and `source` optional; an implausible voltage or unknown source is dropped, the reading kept)
 - Also accept an array of readings (the ESP32 sends a backlog after reconnecting).
-- Steps: verify key hash → validate fields → insert with the service-role client (if `voltage_v` is missing from the DB, retry without it) → run anomaly check → run slab check → run voltage check → return `201 { ok: true, inserted, skipped?, skip_reason? }`.
+- Steps: verify key hash → validate fields → insert with the service-role client (if `voltage_v`/`source` are missing from the DB, retry without them) → run anomaly check → run slab check → run voltage check → return `201 { ok: true, inserted, skipped?, skip_reason? }`.
 - Errors: `401` bad key, `400` invalid body. Keep responses tiny; the ESP32 only reads the status code.
 - Bad *items* are skipped and counted, never rejected: a stale entry, a device clock a few minutes fast, or one corrupt row must not make the ESP32 retry the whole batch forever. Only a malformed body (not a reading or a non-empty array of ≤1000) or a `device_id` that isn't the authenticated device returns `400`.
 - Alert checks must never make the insert fail. Wrap them in try/catch and log.
@@ -206,7 +208,7 @@ Returns 24 items `{ hour, avg_power_w, samples }` plus `top_hours` (the 3 highes
 
 ### `GET /api/stats/voltage?range=1h|24h|week`
 
-Returns `{ range, bucket_seconds, points: [{ ts, avg_voltage_v, max_voltage_v }], latest: { voltage_v, ts } | null, max_voltage_v, high_voltage_v: 250 }`. Grouping in the Postgres function `voltage_live` (`supabase/voltage.sql`); rows without voltage are skipped. The Overview shows it as a line under the live monitor with 230 V (normal) and 250 V (alert) reference lines.
+Returns `{ range, bucket_seconds, points: [{ ts, avg_voltage_v, max_voltage_v }], latest: { voltage_v, ts } | null, max_voltage_v, high_voltage_v: 250 }`. Grouping in the Postgres function `voltage_live` (`supabase/voltage.sql`); rows without voltage are skipped. The Overview shows it as a line under the live monitor with 230 V (normal) and 250 V (alert) reference lines. `/api/stats/live` and `/api/stats/voltage` also return `latest_source`; the monitor shows a badge (✓ REAL · PZEM METER / ✓ REAL · LAPTOP SENSOR / ⚠ TEST SIGNAL / ⚠ SIMULATED), and the voltage panel says TEST SIGNAL unless the source is the PZEM.
 
 ### `GET /api/alerts`
 
@@ -294,5 +296,5 @@ All user-facing routes get the user from the Supabase session and return `401` i
 
 - I'm new to Next.js. When you add or change a route, explain in a line or two what it does and how to test it in Postman.
 - We're on a ~36-hour clock. Build the weather forecast only after ingestion, stats, anomaly and bill all work.
-- `POST /api/readings` is live on Vercel. Until the hardware is ready, `npm run fake-device` (in `energy-monitor/`) stands in for the ESP32; use `-- --watts 2500` to simulate a spike and `-- --volts 262` for high voltage. Real ESP32 integration happens last: keep 4–5 hours for it.
+- `POST /api/readings` is live on Vercel. Until the hardware is ready, `npm run fake-device` (in `energy-monitor/`) stands in for the ESP32; use `-- --watts 2500` to simulate a spike and `-- --volts 262` for high voltage. For a safe live demo with real data, `scripts/laptop-meter.ps1` sends the laptop's real battery power to the ESP32 over USB, which posts it (`source: laptop`; voltage is the `TEST_VOLTAGE` 225–235 V, since battery volts aren't mains). fake-device readings are tagged `simulated`. Real ESP32 integration happens last: keep 4–5 hours for it.
 - Ask before adding a new dependency or a new table.

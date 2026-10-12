@@ -63,7 +63,7 @@ function MonitorTooltip({ active, payload }) {
   const p = payload[0].payload;
   return (
     <div className="rounded-md bg-screen px-2.5 py-1.5 font-bill text-[11px] text-screen-text shadow-lg ring-1 ring-white/10">
-      {fmtTime(p.ts)} · {fmtNum(p.y)} W
+      {fmtTime(p.ts)} · {p.y == null ? "no data" : `${fmtNum(p.y)} W`}
     </div>
   );
 }
@@ -98,6 +98,33 @@ function SpikeMark({ cx, cy, alert, router }) {
   );
 }
 
+// Where the live readings come from, so real and test data are never confused.
+export const SOURCE_LABEL = {
+  pzem: { text: "REAL · PZEM METER", real: true },
+  laptop: { text: "REAL · LAPTOP SENSOR", real: true },
+  test: { text: "TEST SIGNAL", real: false },
+  simulated: { text: "SIMULATED", real: false },
+};
+
+export function SourceBadge({ source }) {
+  const s = SOURCE_LABEL[source];
+  if (!s) return null;
+  return (
+    <span
+      className="rounded-[4px] px-2 py-0.5 font-bill text-[10px] uppercase tracking-wide ring-1"
+      style={{
+        color: s.real ? "var(--lamp-green)" : "var(--lamp-amber)",
+        boxShadow: "none",
+        borderColor: "currentColor",
+        background: s.real ? "rgba(63,191,110,0.12)" : "rgba(242,169,59,0.12)",
+      }}
+    >
+      {s.real ? "✓ " : "⚠ "}
+      {s.text}
+    </span>
+  );
+}
+
 function Filters({ value, onChange }) {
   return (
     <div role="radiogroup" aria-label="Time range" className="inline-flex gap-1 rounded-md bg-black/30 p-1">
@@ -124,10 +151,14 @@ function Filters({ value, onChange }) {
 
 export default function Monitor({ deviceId, alerts, onReading, onStats }) {
   const router = useRouter();
-  const [range, setRange] = useState("24h");
+  // 1 HR by default: 10-second points, so a change shows at once (24 HRS averages 5 min).
+  const [range, setRange] = useState("1h");
   const [points, setPoints] = useState([]);
   const [peak, setPeak] = useState(null);
   const [latest, setLatest] = useState(null);
+  const [source, setSource] = useState(null);
+  const [fetchedTs, setFetchedTs] = useState(null); // newest reading's real ts, from the API
+  const [tick, setTick] = useState(0);
   const [status, setStatus] = useState("connecting");
   const [loading, setLoading] = useState(true);
   const bucketsRef = useRef(new Map());
@@ -147,6 +178,12 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
     onStatsRef.current = onStats;
   }, [onStats]);
 
+  // Reload every 30 s as well, so the chart and DEVICE lamp recover if Realtime drops.
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   // Fresh load whenever the filter changes. The previous range's points stay
   // on screen until this resolves (same "keep old data" rule as useApi.js),
   // so switching filters doesn't flash NO SIGNAL for a moment.
@@ -164,19 +201,18 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
         }
         setPoints(body.points ?? []);
         setPeak(body.peak ?? null);
+        setSource(body.latest_source ?? null);
+        setFetchedTs(body.latest_ts ?? null);
         setLoading(false);
       } catch {
-        if (!cancelled) {
-          setPoints([]);
-          setPeak(null);
-          setLoading(false);
-        }
+        // Keep what's on screen; the next reload or Realtime row fills it in.
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [cfg.api, cfg.bucketMs]);
+  }, [cfg.api, cfg.bucketMs, tick]);
 
   // One subscription for the component's life; the handler always reads the
   // current filter through cfgRef so switching filters doesn't resubscribe.
@@ -189,6 +225,7 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
         { event: "INSERT", schema: "public", table: "readings", filter: `device_id=eq.${deviceId}` },
         ({ new: row }) => {
           setLatest(row);
+          setSource(row.source ?? null);
           onReadingRef.current?.(row);
 
           const { bucketMs, spanMs } = cfgRef.current;
@@ -228,10 +265,13 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
       (a) => a.type === "anomaly" && Date.parse(a.ts) >= domain[0] && Date.parse(a.ts) <= domain[1]
     );
   }, [alerts, domain]);
-  const avgDisplay = chartData.length ? chartData.reduce((s, d) => s + d.y, 0) / chartData.length : null;
+  const measured = chartData.filter((d) => d.y != null); // gap markers carry y = null
+  const avgDisplay = measured.length ? measured.reduce((s, d) => s + d.y, 0) / measured.length : null;
   const nowW = latest?.power_w ?? chartData.at(-1)?.y ?? null;
-  const lastReadingTs = latest?.ts ?? chartData.at(-1)?.ts ?? null;
-  const live = Boolean(latest && now && now - Date.parse(latest.ts) < STALE_MS);
+  // Newest of the Realtime row and the API's latest_ts (a bucket start can be minutes old).
+  const lastReadingTs =
+    [latest?.ts, fetchedTs].filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+  const live = Boolean(lastReadingTs && now && now - Date.parse(lastReadingTs) < STALE_MS);
 
   // Lifted to the Overview page: Readouts sits under both the monitor and the
   // status lights column, and the DEVICE lamp needs the last reading time
@@ -246,6 +286,7 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
         <span className="flex items-center gap-2 font-bill text-[11px] uppercase tracking-wide text-screen-text/60">
           <span className="live-dot" data-state={live ? "live" : "stale"} />
           {live ? "Live" : status === "subscribed" ? "Waiting for device" : "Connecting…"}
+          {live && <SourceBadge source={source} />}
         </span>
         <Filters value={range} onChange={setRange} />
       </div>
@@ -296,6 +337,7 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
                 strokeWidth={2}
                 fill="url(#traceFill)"
                 isAnimationActive={false}
+                connectNulls
                 dot={false}
                 activeDot={{ r: 3, fill: "var(--trace)", stroke: "var(--screen)" }}
               />
