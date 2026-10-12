@@ -85,7 +85,8 @@ There is no machine-learning model. The analytics are simple statistics: average
 ### 2. Install
 
 ```bash
-cd energy-monitor
+git clone https://github.com/TayyabSohail838/smart-home-energy-monitor.git
+cd smart-home-energy-monitor
 npm install
 ```
 
@@ -105,7 +106,7 @@ All of them are safe to run again.
 
 ### 4. Add your keys
 
-Create a file called `.env.local` in the `energy-monitor` folder:
+Create a file called `.env.local` in the project folder:
 
 ```env
 # Supabase (Project Settings → API)
@@ -339,7 +340,7 @@ firmware/wattly-esp32/    ESP32 code
 
 ## Deploying to Vercel
 
-1. Push the repo to GitHub and import it in Vercel. Set the root folder to `energy-monitor`.
+1. Import this GitHub repo in Vercel. It detects Next.js by itself.
 2. Add the same environment variables as in `.env.local`. You don't need `DEVICE_ID`, `DEVICE_SECRET`, `TEST_EMAIL` or `TEST_PASSWORD`, which are only for local scripts.
 3. Deploy, then point the ESP32's `API_URL` at `https://<your-app>.vercel.app/api/readings`.
 
