@@ -98,6 +98,33 @@ function SpikeMark({ cx, cy, alert, router }) {
   );
 }
 
+// Where the live readings come from, so real and test data are never confused.
+export const SOURCE_LABEL = {
+  pzem: { text: "REAL · PZEM METER", real: true },
+  laptop: { text: "REAL · LAPTOP SENSOR", real: true },
+  test: { text: "TEST SIGNAL", real: false },
+  simulated: { text: "SIMULATED", real: false },
+};
+
+export function SourceBadge({ source }) {
+  const s = SOURCE_LABEL[source];
+  if (!s) return null;
+  return (
+    <span
+      className="rounded-[4px] px-2 py-0.5 font-bill text-[10px] uppercase tracking-wide ring-1"
+      style={{
+        color: s.real ? "var(--lamp-green)" : "var(--lamp-amber)",
+        boxShadow: "none",
+        borderColor: "currentColor",
+        background: s.real ? "rgba(63,191,110,0.12)" : "rgba(242,169,59,0.12)",
+      }}
+    >
+      {s.real ? "✓ " : "⚠ "}
+      {s.text}
+    </span>
+  );
+}
+
 function Filters({ value, onChange }) {
   return (
     <div role="radiogroup" aria-label="Time range" className="inline-flex gap-1 rounded-md bg-black/30 p-1">
@@ -128,6 +155,7 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
   const [points, setPoints] = useState([]);
   const [peak, setPeak] = useState(null);
   const [latest, setLatest] = useState(null);
+  const [source, setSource] = useState(null);
   const [status, setStatus] = useState("connecting");
   const [loading, setLoading] = useState(true);
   const bucketsRef = useRef(new Map());
@@ -164,6 +192,7 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
         }
         setPoints(body.points ?? []);
         setPeak(body.peak ?? null);
+        setSource(body.latest_source ?? null);
         setLoading(false);
       } catch {
         if (!cancelled) {
@@ -189,6 +218,7 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
         { event: "INSERT", schema: "public", table: "readings", filter: `device_id=eq.${deviceId}` },
         ({ new: row }) => {
           setLatest(row);
+          setSource(row.source ?? null);
           onReadingRef.current?.(row);
 
           const { bucketMs, spanMs } = cfgRef.current;
@@ -246,6 +276,7 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
         <span className="flex items-center gap-2 font-bill text-[11px] uppercase tracking-wide text-screen-text/60">
           <span className="live-dot" data-state={live ? "live" : "stale"} />
           {live ? "Live" : status === "subscribed" ? "Waiting for device" : "Connecting…"}
+          {live && <SourceBadge source={source} />}
         </span>
         <Filters value={range} onChange={setRange} />
       </div>

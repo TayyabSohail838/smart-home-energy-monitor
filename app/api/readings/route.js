@@ -30,12 +30,13 @@ export async function POST(request) {
 
   if (rows.length > 0) {
     let { error: insertError } = await supabaseAdmin.from("readings").insert(rows);
-    // Database not migrated yet (supabase/voltage.sql): keep the energy data, drop voltage.
-    if (insertError && insertError.message.includes("voltage_v")) {
-      console.warn("readings: voltage_v column missing, run supabase/voltage.sql; storing without voltage");
+    // Database not migrated yet (supabase/voltage.sql, supabase/source.sql): keep the
+    // energy data, drop the optional columns.
+    if (insertError && /voltage_v|source/.test(insertError.message)) {
+      console.warn("readings: optional column missing (run supabase/voltage.sql / source.sql); storing without it");
       ({ error: insertError } = await supabaseAdmin
         .from("readings")
-        .insert(rows.map(({ voltage_v, ...rest }) => rest)));
+        .insert(rows.map(({ voltage_v, source, ...rest }) => rest)));
     }
     if (insertError) {
       console.error("readings insert failed:", insertError.message);

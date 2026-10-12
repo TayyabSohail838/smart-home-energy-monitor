@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { SourceBadge } from "@/components/meter/Monitor";
 import { fmtNum, fmtTime } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
@@ -42,6 +43,9 @@ export default function VoltageMonitor() {
   const latest = data?.latest?.voltage_v ?? null;
   const high = latest != null && latest > limit;
   const peak = data?.max_voltage_v ?? null;
+  // Only the PZEM measures mains voltage; with any other source the voltage is a test value.
+  const src = data?.latest_source;
+  const voltSource = !src || src === "pzem" ? src : src === "simulated" ? "simulated" : "test";
   const lo = Math.min(200, ...points.map((p) => p.avg)) - 5;
   const hi = Math.max(limit + 10, ...points.map((p) => p.max)) + 5;
 
@@ -59,6 +63,7 @@ export default function VoltageMonitor() {
             </>
           )}
           {peak != null && <span className="text-[11px] text-screen-text/50">Peak {fmtNum(peak, 0)} V</span>}
+          {latest != null && <SourceBadge source={voltSource} />}
         </div>
         <div role="radiogroup" aria-label="Voltage time range" className="inline-flex gap-1 rounded-md bg-black/30 p-1">
           {RANGES.map((r) => (

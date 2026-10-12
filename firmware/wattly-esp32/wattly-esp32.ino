@@ -12,8 +12,8 @@
 // Where a reading comes from, best first:
 //   1. the PZEM (real mains watts + volts)
 //   2. a laptop over USB: scripts/laptop-meter.ps1 sends "W <watts>" lines with the
-//      laptop's real battery power (battery volts aren't mains: TEST_MODE voltage, or none)
-//   3. TEST_MODE values
+//      laptop's real battery power (battery volts aren't mains: TEST_VOLTAGE value, or none)
+//   3. TEST_POWER values (off)
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -25,10 +25,12 @@
 #define PZEM_RX_PIN 16  // ESP32 pin that receives from PZEM TX
 #define PZEM_TX_PIN 17  // ESP32 pin that sends to PZEM RX
 
-// TEST MODE: while the PZEM has no mains power (no reading), send a made-up 30-65 W,
-// 225-235 V value so the dashboard shows the ESP32 -> Wi-Fi -> server path working.
-// Real PZEM readings always win. Set to false before the real demo.
-#define TEST_MODE true
+// TEST_POWER: with no PZEM or laptop reading, send made-up 30-65 W (labelled "test").
+// Off, so every watt on the dashboard is real; with nothing to measure, nothing is sent.
+#define TEST_POWER false
+// TEST_VOLTAGE: add a made-up 225-235 V to laptop readings (battery volts aren't mains),
+// so the voltage chart has a line. The dashboard labels it TEST SIGNAL.
+#define TEST_VOLTAGE true
 const float TEST_MIN_W = 30, TEST_MAX_W = 65;    // like a laptop charging
 const float TEST_MIN_V = 225, TEST_MAX_V = 235;  // normal Pakistani mains
 
@@ -44,6 +46,7 @@ PZEM004Tv30 pzem(Serial2, PZEM_RX_PIN, PZEM_TX_PIN);
 struct Reading {
   time_t ts;
   float current_a, power_w, energy_wh, voltage_v;
+  const char *source;  // "pzem" | "laptop" | "test" (shown on the dashboard)
 };
 Reading backlog[MAX_BACKLOG];
 int backlogCount = 0;
@@ -115,8 +118,9 @@ bool sendBacklog() {
     if (!isnan(backlog[i].voltage_v)) snprintf(volts, sizeof(volts), ",\"voltage_v\":%.1f", backlog[i].voltage_v);
     char item[260];
     snprintf(item, sizeof(item),
-             "%s{\"device_id\":\"%s\",\"ts\":\"%s\",\"current_a\":%.3f,\"power_w\":%.1f,\"energy_wh\":%.4f%s}",
-             i ? "," : "", DEVICE_ID, ts, backlog[i].current_a, backlog[i].power_w, backlog[i].energy_wh, volts);
+             "%s{\"device_id\":\"%s\",\"ts\":\"%s\",\"current_a\":%.3f,\"power_w\":%.1f,\"energy_wh\":%.4f%s,\"source\":\"%s\"}",
+             i ? "," : "", DEVICE_ID, ts, backlog[i].current_a, backlog[i].power_w, backlog[i].energy_wh, volts,
+             backlog[i].source);
     body += item;
   }
   body += "]";
@@ -169,13 +173,13 @@ void loop() {
     if (noReading && !isnan(laptopWatts) && millis() - laptopAtMs < LAPTOP_FRESH_MS) {
       power = laptopWatts;
       current = power / LAPTOP_VOLTS;
-      // Battery volts aren't mains voltage. With TEST_MODE on, send a labelled test mains
+      // Battery volts aren't mains voltage. With TEST_VOLTAGE on, send a labelled test mains
       // voltage so the voltage chart has a line; otherwise send none.
-      voltage = TEST_MODE ? randomBetween(TEST_MIN_V, TEST_MAX_V) : NAN;
+      voltage = TEST_VOLTAGE ? randomBetween(TEST_MIN_V, TEST_MAX_V) : NAN;
       laptop = true;
       noReading = false;
     }
-    if (noReading && TEST_MODE) {
+    if (noReading && TEST_POWER) {
       power = randomBetween(TEST_MIN_W, TEST_MAX_W);
       voltage = randomBetween(TEST_MIN_V, TEST_MAX_V);
       current = power / voltage;
@@ -183,11 +187,12 @@ void loop() {
       noReading = false;
     }
     if (noReading) {
-      Serial.println("PZEM: no reading (check wiring and that the PZEM has mains power)");
+      Serial.println("No reading: PZEM has no mains, no laptop data (run scripts/laptop-meter.ps1)");
     } else if (!clockReady()) {
       Serial.println("Waiting for internet time before sending...");
     } else {
-      Reading r = {time(nullptr), current, power, power * elapsedS / 3600.0f, voltage};
+      Reading r = {time(nullptr), current, power, power * elapsedS / 3600.0f, voltage,
+                   laptop ? "laptop" : test ? "test" : "pzem"};
       if (laptop) {
         Serial.printf("LAPTOP (real, via USB): %.1f W  %.4f Wh", r.power_w, r.energy_wh);
         if (!isnan(r.voltage_v)) Serial.printf("  | TEST voltage %.1f V", r.voltage_v);
