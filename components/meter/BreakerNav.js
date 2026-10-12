@@ -193,7 +193,7 @@ export function SidePanel({ user, device, router, collapsed, onToggleCollapse })
       </nav>
 
       <div className="mt-auto flex flex-col gap-1 border-t border-dashed border-white/15 pt-3">
-        <Breaker href="/alerts#settings" label="Settings" icon="settings" active={false} compact collapsed={collapsed} />
+        <Breaker href="/settings" label="Settings" icon="settings" active={pathname.startsWith("/settings")} compact collapsed={collapsed} />
         <Breaker label="Log out" icon="logout" active={true} danger onClick={logout} compact collapsed={collapsed} />
       </div>
 
@@ -237,7 +237,7 @@ export function MobileHeader({ user, device, router }) {
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="animate-fade-up absolute right-2 top-full z-50 mt-1.5 w-48 rounded-md bg-breaker-body p-1.5 shadow-xl ring-1 ring-white/10">
             <Link
-              href="/alerts#settings"
+              href="/settings"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 rounded-md px-2.5 py-2 font-bill text-[11px] uppercase tracking-wide text-white/70 hover:bg-white/10 hover:text-white"
             >
