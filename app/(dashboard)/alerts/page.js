@@ -3,10 +3,34 @@
 import { useState } from "react";
 import Stamp from "@/components/auth/Stamp";
 import Logbook from "@/components/meter/Logbook";
+import { Panel } from "@/components/meter/Panel";
 import WallSwitch from "@/components/meter/WallSwitch";
 import PageHeader from "@/components/PageHeader";
-import { Badge, Card, ErrorNote, Skeleton, Tabs } from "@/components/ui";
+import { ErrorNote, Skeleton, Tabs } from "@/components/ui";
 import { useApi } from "@/lib/useApi";
+
+// Matches Logbook's STAMP map (components/meter/Logbook.js), so the same
+// alert type reads the same way everywhere on the page.
+const HOW_IT_WORKS = [
+  {
+    type: "anomaly",
+    tone: "red",
+    label: "Unusual usage",
+    detail: "The last 5 minutes are far above what your home normally uses at this hour (μ + 3σ and 300 W more). At most one every 30 minutes.",
+  },
+  {
+    type: "slab_warning",
+    tone: "ink",
+    label: "Slab warning",
+    detail: "This month's projection lands in a more expensive slab, or you're within 10 units of the current slab's limit. At most once per slab per month.",
+  },
+  {
+    type: "voltage",
+    tone: "red",
+    label: "High voltage",
+    detail: "Mains voltage reads above 250 V. Pakistani mains is nominally 230 V. At most one every 30 minutes.",
+  },
+];
 
 const FILTERS = [
   { value: "all", label: "All" },
@@ -49,10 +73,7 @@ function EmailSettings() {
   }
 
   return (
-    <div id="settings" className="rounded-md border border-ink/15 p-5">
-      <p className="mb-4 font-bill text-[11px] uppercase tracking-wide text-ink-soft">
-        Email alerts · sent through Resend when an alert fires
-      </p>
+    <Panel id="settings" title="Email alerts · sent through Resend when an alert fires" className="mb-6">
       {!form ? (
         <Skeleton className="h-28 w-full" />
       ) : (
@@ -96,7 +117,7 @@ function EmailSettings() {
       <p className="mt-4 text-xs leading-relaxed text-ink-soft">
         Demo setup: without a verified domain, Resend only delivers to the email that owns the Resend account.
       </p>
-    </div>
+    </Panel>
   );
 }
 
@@ -130,18 +151,16 @@ export default function AlertsPage() {
           )}
         </div>
 
-        <Card delay={120} title="How alerts work" hover={false}>
-          <ul className="space-y-3 text-sm text-ink-2">
-            <li>
-              <Badge status="critical">Unusual usage</Badge>
-              <p className="mt-1">The last 5 minutes are far above what your home normally uses at this hour (μ + 3σ and 300 W more). At most one every 30 minutes.</p>
-            </li>
-            <li>
-              <Badge status="warning">Slab warning</Badge>
-              <p className="mt-1">This month&apos;s projection lands in a more expensive slab. Once per slab per month.</p>
-            </li>
+        <Panel title="How alerts work">
+          <ul className="space-y-4">
+            {HOW_IT_WORKS.map((x) => (
+              <li key={x.type} className="border-t border-dotted border-rule pt-3 first:border-t-0 first:pt-0">
+                <Stamp tone={x.tone} className="text-[10px]">{x.label}</Stamp>
+                <p className="mt-2 text-sm leading-relaxed text-ink-soft">{x.detail}</p>
+              </li>
+            ))}
           </ul>
-        </Card>
+        </Panel>
       </div>
     </>
   );

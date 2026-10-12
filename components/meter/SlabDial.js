@@ -90,7 +90,10 @@ export default function SlabDial({ used, projected, currentSlab, nextSlab, units
 
   return (
     <div>
-      <svg viewBox="0 0 200 120" className="w-full" role="img" aria-label={ariaLabel}>
+      {/* viewBox is wider than the dial itself (-20 to 220 vs the gauge's 0-200) so the
+          leftmost ("0-100") and rightmost (open-ended, e.g. "501-600") slab labels have
+          room for their text-anchor="middle" overflow instead of being clipped at the edge. */}
+      <svg viewBox="-20 0 240 120" className="w-full" role="img" aria-label={ariaLabel}>
         {shown.map((s, i) => {
           const start = i === 0 ? 0 : shown[i - 1].max_units;
           const end = Math.min(s.max_units ?? scaleMax, scaleMax);

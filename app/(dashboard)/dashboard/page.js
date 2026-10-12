@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from "react";
 import AlertBanner from "@/components/AlertBanner";
 import AlertTicker from "@/components/meter/AlertTicker";
 import BillSlip from "@/components/meter/BillSlip";
+import GridScene from "@/components/meter/GridScene";
 import Monitor from "@/components/meter/Monitor";
 import { Panel } from "@/components/meter/Panel";
 import Readouts from "@/components/meter/Readouts";
@@ -89,10 +90,10 @@ export default function OverviewPage() {
 
       <Readouts now={monitorStats.now} peak={monitorStats.peak} avg={monitorStats.avg} todayKwh={s?.today_kwh} />
 
-      <div className="mt-6 grid gap-6 sm:grid-cols-2">
+      <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
         <UnitsCounter value={s?.month_kwh} projected={s?.projected_month_kwh} />
 
-        <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+        <div className="w-full sm:w-72 md:w-80">
           <SlabDial
             used={s?.month_kwh}
             projected={s?.projected_month_kwh}
@@ -101,16 +102,17 @@ export default function OverviewPage() {
             unitsToNextSlab={s?.units_to_next_slab}
             projectedSlab={s?.projected_slab}
           />
-          <BillSlip
-            billSoFar={s?.bill_so_far}
-            projectedBill={s?.projected_bill}
-            slabMode={s?.slab_mode}
-            rate={s?.current_slab?.rate_per_unit}
-          />
         </div>
+
+        <BillSlip
+          billSoFar={s?.bill_so_far}
+          projectedBill={s?.projected_bill}
+          slabMode={s?.slab_mode}
+          rate={s?.current_slab?.rate_per_unit}
+        />
       </div>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+      <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">
         <Panel title="Today by hour" action={<p className="font-bill text-[11px] text-ink-soft">{today.data ? `${fmtNum(today.data.total_kwh, 2)} kWh so far` : ""}</p>}>
           {today.data ? (
             <StripChart points={today.data.points} unit="hour" rate={s?.current_slab?.rate_per_unit} height={200} />
@@ -154,6 +156,12 @@ export default function OverviewPage() {
             <div className="skeleton h-28 w-full rounded-md" />
           )}
         </Panel>
+
+        {/* the grid's gap-5 (20px) applies above Peak hours as normal; this
+            item is pulled up closer to it, leaving only a few px below. */}
+        <div className="-mt-[30px] h-full min-h-[200px] w-full self-stretch overflow-hidden rounded-md">
+          <GridScene />
+        </div>
       </div>
     </>
   );
