@@ -8,6 +8,12 @@
 //   { device_id, ts, current_a, power_w, energy_wh, voltage_v }
 // energy_wh is the energy in this window (power x elapsed time), as the API expects.
 // voltage_v is the mains voltage; the server emails an alert above 250 V.
+//
+// Where a reading comes from, best first:
+//   1. the PZEM (real mains watts + volts)
+//   2. a laptop over USB: scripts/laptop-meter.ps1 sends "W <watts>" lines with the
+//      laptop's real battery power (battery volts aren't mains: TEST_MODE voltage, or none)
+//   3. TEST_MODE values
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -26,6 +32,9 @@
 const float TEST_MIN_W = 30, TEST_MAX_W = 65;    // like a laptop charging
 const float TEST_MIN_V = 225, TEST_MAX_V = 235;  // normal Pakistani mains
 
+const uint32_t LAPTOP_FRESH_MS = 25000;          // a laptop reading counts for 25 s
+const float LAPTOP_VOLTS = 230;                  // only to turn watts into amps for current_a
+
 const uint32_t INTERVAL_MS = 10000;
 const int MAX_BACKLOG = 60;  // 10 minutes of readings kept while offline
 const int MAX_BATCH = 30;    // readings per POST when catching up
@@ -39,6 +48,29 @@ struct Reading {
 Reading backlog[MAX_BACKLOG];
 int backlogCount = 0;
 uint32_t lastReadMs = 0;
+float laptopWatts = NAN;
+uint32_t laptopAtMs = 0;
+String serialLine;
+
+// Reads "W 10.6" lines from the laptop script over USB.
+void readLaptop() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n') {
+      serialLine.trim();
+      if (serialLine.startsWith("W ")) {
+        float w = serialLine.substring(2).toFloat();
+        if (w >= 0 && w < 500) {
+          laptopWatts = w;
+          laptopAtMs = millis();
+        }
+      }
+      serialLine = "";
+    } else if (serialLine.length() < 40) {
+      serialLine += c;
+    }
+  }
+}
 
 void connectWifi() {
   if (WiFi.status() == WL_CONNECTED) return;
@@ -79,11 +111,12 @@ bool sendBacklog() {
   char ts[25];
   for (int i = 0; i < n; i++) {
     isoTime(backlog[i].ts, ts, sizeof(ts));
+    char volts[24] = "";
+    if (!isnan(backlog[i].voltage_v)) snprintf(volts, sizeof(volts), ",\"voltage_v\":%.1f", backlog[i].voltage_v);
     char item[260];
     snprintf(item, sizeof(item),
-             "%s{\"device_id\":\"%s\",\"ts\":\"%s\",\"current_a\":%.3f,\"power_w\":%.1f,\"energy_wh\":%.4f,\"voltage_v\":%.1f}",
-             i ? "," : "", DEVICE_ID, ts, backlog[i].current_a, backlog[i].power_w, backlog[i].energy_wh,
-             backlog[i].voltage_v);
+             "%s{\"device_id\":\"%s\",\"ts\":\"%s\",\"current_a\":%.3f,\"power_w\":%.1f,\"energy_wh\":%.4f%s}",
+             i ? "," : "", DEVICE_ID, ts, backlog[i].current_a, backlog[i].power_w, backlog[i].energy_wh, volts);
     body += item;
   }
   body += "]";
@@ -121,6 +154,7 @@ void setup() {
 
 void loop() {
   connectWifi();
+  readLaptop();
 
   uint32_t now = millis();
   if (now - lastReadMs >= INTERVAL_MS || lastReadMs == 0) {
@@ -131,7 +165,16 @@ void loop() {
     float power = pzem.power();
     float voltage = pzem.voltage();
     bool noReading = isnan(current) || isnan(power) || isnan(voltage);
-    bool test = false;
+    bool test = false, laptop = false;
+    if (noReading && !isnan(laptopWatts) && millis() - laptopAtMs < LAPTOP_FRESH_MS) {
+      power = laptopWatts;
+      current = power / LAPTOP_VOLTS;
+      // Battery volts aren't mains voltage. With TEST_MODE on, send a labelled test mains
+      // voltage so the voltage chart has a line; otherwise send none.
+      voltage = TEST_MODE ? randomBetween(TEST_MIN_V, TEST_MAX_V) : NAN;
+      laptop = true;
+      noReading = false;
+    }
     if (noReading && TEST_MODE) {
       power = randomBetween(TEST_MIN_W, TEST_MAX_W);
       voltage = randomBetween(TEST_MIN_V, TEST_MAX_V);
@@ -145,8 +188,14 @@ void loop() {
       Serial.println("Waiting for internet time before sending...");
     } else {
       Reading r = {time(nullptr), current, power, power * elapsedS / 3600.0f, voltage};
-      Serial.printf("%s%.1f V  %.3f A  %.1f W  %.4f Wh\n", test ? "TEST (no PZEM reading): " : "",
-                    r.voltage_v, r.current_a, r.power_w, r.energy_wh);
+      if (laptop) {
+        Serial.printf("LAPTOP (real, via USB): %.1f W  %.4f Wh", r.power_w, r.energy_wh);
+        if (!isnan(r.voltage_v)) Serial.printf("  | TEST voltage %.1f V", r.voltage_v);
+        Serial.println();
+      } else {
+        Serial.printf("%s%.1f V  %.3f A  %.1f W  %.4f Wh\n", test ? "TEST (no PZEM reading): " : "",
+                      r.voltage_v, r.current_a, r.power_w, r.energy_wh);
+      }
       addToBacklog(r);
     }
     // Catch up a few batches per cycle after an outage.
