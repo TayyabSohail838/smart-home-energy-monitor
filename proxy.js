@@ -68,5 +68,5 @@ function redirectKeepingCookies(request, response, path) {
 
 export const config = {
   // Skip static files and the device-only routes (the ESP32 has no login).
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|landing/|api/readings|api/health).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|landing/|api/readings|api/health).*)"],
 };
