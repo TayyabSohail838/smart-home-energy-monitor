@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
+import ChatWidget from "@/components/ChatWidget";
 import { BottomBar, MobileHeader, SidePanel } from "@/components/meter/BreakerNav";
 import { getSupabase } from "@/lib/supabase/client";
 
@@ -59,6 +60,7 @@ export default function Shell({ children }) {
         </main>
       </div>
       <BottomBar />
+      {state.ready && <ChatWidget />}
     </DeviceContext.Provider>
   );
 }

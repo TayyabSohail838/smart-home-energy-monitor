@@ -1,23 +1,23 @@
 # CLAUDE.md — Smart Home Energy Monitor (Backend)
 
-Backend for a 24-hour hackathon project. An ESP32 with an SCT-013 clamp posts electricity readings every 10 seconds; this backend stores them, runs anomaly and tariff-slab checks, sends alert emails, and serves stats to the dashboard.
+Backend for a 24-hour hackathon project. An ESP32 with a PZEM-004T v3.0 (100 A split-core CT) posts electricity readings (including mains voltage) every 10 seconds; this backend stores them, runs anomaly, tariff-slab and high-voltage checks, sends alert emails, and serves stats to the dashboard.
 
 The full design lives in the "Smart Home Energy Monitor: System Architecture" doc. This file is the working summary for the backend only.
 
 ## Scope
 
-**Build:** reading ingestion, device linking, stats (summary, history, peak hours), anomaly detection, slab-based bill estimate, alerts (stored + emailed), seed script, weather-based usage forecast + suggestions (built last, first to cut).
+**Build:** reading ingestion, device linking, stats (summary, history, peak hours), anomaly detection, slab-based bill estimate, alerts (stored + emailed), seed script, weather-based usage forecast + suggestions, dashboard chatbot (Gemini, answers from the user's own data via tools), mains voltage (chart + alert above 250 V).
 
-**Do not build:** ML models or trained datasets, LLM tips, appliance detection (NILM), manual appliance entry, voltage tracking, multiple devices per user, per-user location. These are roadmap or dropped. Don't add them, even partially.
+**Do not build:** ML models or trained datasets, LLM features other than the chatbot, appliance detection (NILM), manual appliance entry, power-quality analysis beyond the voltage chart and 250 V alert (harmonics, sags, power factor), multiple devices per user, per-user location. These are roadmap or dropped. Don't add them, even partially.
 
 Time is the main constraint. Prefer the simplest thing that works and is easy to explain to judges.
 
 ## Build status
 
-Done: ingestion (`POST /api/readings`, deployed on Vercel), login + device linking, 30-day seed, history, peak hours, slab bill + summary, anomaly detection, alerts + email (Resend), settings, weather forecast (14 days + 12 months), dashboard UI.
+Done: ingestion (`POST /api/readings`, deployed on Vercel), ESP32 firmware (uploaded, online; TEST_MODE until mains is wired), voltage chart + alert, login + device linking, 30-day seed, history, peak hours, slab bill + summary, anomaly detection, alerts + email (Resend), settings, weather forecast (14 days + 12 months), dashboard UI, chatbot code (needs `GEMINI_API_KEY`).
 
 Remaining:
-1. Hardware integration: real ESP32 → deployed API (keep 4–5 hours; until then `npm run fake-device`).
+1. Hardware: the ESP32 is programmed and sending, but the PZEM has no mains (no electrician), so `TEST_MODE` sends labelled test readings (30–65 W, 225–235 V). When an electrician wires L/N and the CT, set `TEST_MODE false` and re-upload. Run `supabase/voltage.sql` once if not done.
 2. Demo prep: re-run `npm run seed` before recording, add `RESEND_API_KEY` / `ALERT_FROM_EMAIL` in Vercel, README.
 3. Optional, only if time remains: load-shedding (outage) prediction from reading gaps — currently Dropped in the design doc.
 
@@ -56,9 +56,11 @@ app/
     stats/summary/route.js   # GET   - today/month kWh, bill, slab info
     stats/history/route.js   # GET   - ?range=day|week|month|30d
     stats/peak-hours/route.js# GET   - avg power per hour + top 3
+    stats/voltage/route.js   # GET   - ?range=1h|24h|week: mains voltage per bucket + latest
     alerts/route.js          # GET   - user's alerts, newest first
     settings/route.js        # GET, PATCH - email_alerts on/off, alert_email
     forecast/route.js        # GET   - ?months=1-12: 14-day weather + monthly outlook, kWh/bill, suggestions
+    chat/route.js            # POST  - dashboard chatbot (Gemini + data tools)
 lib/
   supabase/server.js         # cookie-based client for user requests
   supabase/admin.js          # service-role client (server only)
@@ -66,13 +68,20 @@ lib/
   anomaly.js                 # anomaly rule
   bill.js                    # slab pricing + month-end projection
   alerts.js                  # create alert row + send email
+  voltage.js                 # high-voltage alert (> 250 V, 30-min cooldown)
   email.js                   # Resend wrapper
   weather.js                 # Open-Meteo: daily temps, seasonal forecast, 5-year normals
   forecast.js                # temperature → kWh regression + suggestion rules
+  chat/gemini.js             # Gemini generateContent loop (plain fetch) + system prompt
+  chat/tools.js              # chatbot tools → existing lib functions, user's own device only (get_live_power includes voltage)
 supabase/
   schema.sql                 # tables, indexes, RLS policies
+  voltage.sql                # voltage_v column, 'voltage' alert type, voltage_live() (run once on existing DBs)
 scripts/
   seed.js                    # sample history generator
+firmware/
+  wattly-esp32/wattly-esp32.ino  # ESP32 + PZEM-004T: read every 10 s, POST to /api/readings (backlog when offline)
+  wattly-esp32/secrets.example.h # copy to secrets.h (git-ignored): Wi-Fi, DEVICE_ID, DEVICE_SECRET, API_URL
 ```
 
 ## Dashboard (UI)
@@ -80,7 +89,8 @@ scripts/
 Light glass style, Tailwind v4 tokens in `app/globals.css`, Recharts for graphs, CSS-only animations (no animation library).
 
 ```
-app/login/page.js              # log in / sign up (Supabase Auth in the browser)
+app/login/page.js              # log in / sign up / "Forgot password?" (Supabase Auth in the browser)
+app/reset-password/page.js     # set a new password from the reset email link (same browser)
 app/link/page.js               # enter the device link code
 app/(dashboard)/layout.js      # sidebar shell for the pages below (instant = false: per-user pages)
 app/(dashboard)/page.js        # Overview: live power (Realtime), bill, slab meter, today, weather, peak hours
@@ -108,6 +118,8 @@ RESEND_API_KEY=
 ALERT_FROM_EMAIL=
 HOME_LAT=                       # home city for weather (one fixed location)
 HOME_LON=
+GEMINI_API_KEY=                 # chatbot, server only (aistudio.google.com)
+GEMINI_MODEL=gemini-3.8-flash   # or gemini-3.5-flash-lite
 ```
 
 ## Data model
@@ -129,6 +141,7 @@ readings (
   current_a real not null,
   power_w real not null,
   energy_wh real not null,                   -- energy in this 10 s window
+  voltage_v real null,                       -- mains voltage from the PZEM (0-500); null on old/seeded rows
   is_seeded boolean default false
 )
 -- index on readings (device_id, ts)
@@ -137,7 +150,7 @@ alerts (
   id bigint generated always as identity pk,
   device_id uuid references devices not null,
   ts timestamptz default now(),
-  type text check (type in ('anomaly','slab_warning')),
+  type text check (type in ('anomaly','slab_warning','voltage')),
   message text,
   power_w real,
   emailed boolean default false
@@ -166,9 +179,9 @@ Tariff rates are not hard-coded in code. They live in `tariff_slabs`, loaded fro
 ### `POST /api/readings` (called by the ESP32)
 
 - Header: `x-device-key: <secret>` and the device id in the body or header.
-- Body: `{ "device_id": "...", "ts": "2026-10-11T14:05:10Z", "current_a": 4.82, "power_w": 1109, "energy_wh": 3.08 }`
+- Body: `{ "device_id": "...", "ts": "2026-10-11T14:05:10Z", "current_a": 4.82, "power_w": 1109, "energy_wh": 3.08, "voltage_v": 231.4 }` (`voltage_v` optional; an implausible value is dropped, the reading kept)
 - Also accept an array of readings (the ESP32 sends a backlog after reconnecting).
-- Steps: verify key hash → validate fields → insert with the service-role client → run anomaly check → run slab check → return `201 { ok: true, inserted, skipped?, skip_reason? }`.
+- Steps: verify key hash → validate fields → insert with the service-role client (if `voltage_v` is missing from the DB, retry without it) → run anomaly check → run slab check → run voltage check → return `201 { ok: true, inserted, skipped?, skip_reason? }`.
 - Errors: `401` bad key, `400` invalid body. Keep responses tiny; the ESP32 only reads the status code.
 - Bad *items* are skipped and counted, never rejected: a stale entry, a device clock a few minutes fast, or one corrupt row must not make the ESP32 retry the whole batch forever. Only a malformed body (not a reading or a non-empty array of ≤1000) or a `device_id` that isn't the authenticated device returns `400`.
 - Alert checks must never make the insert fail. Wrap them in try/catch and log.
@@ -191,6 +204,10 @@ Returns `{ today_kwh, month_kwh, bill_so_far, current_slab, next_slab, units_to_
 
 Returns 24 items `{ hour, avg_power_w, samples }` plus `top_hours` (the 3 highest). Rank only hours with `samples > 0`: an hour with no readings averages 0 and isn't a measurement.
 
+### `GET /api/stats/voltage?range=1h|24h|week`
+
+Returns `{ range, bucket_seconds, points: [{ ts, avg_voltage_v, max_voltage_v }], latest: { voltage_v, ts } | null, max_voltage_v, high_voltage_v: 250 }`. Grouping in the Postgres function `voltage_live` (`supabase/voltage.sql`); rows without voltage are skipped. The Overview shows it as a line under the live monitor with 230 V (normal) and 250 V (alert) reference lines.
+
 ### `GET /api/alerts`
 
 User's alerts, newest first, limit 50: `{ alerts: [{ id, ts, type, message, power_w, emailed }] }`.
@@ -202,6 +219,13 @@ User's alerts, newest first, limit 50: `{ alerts: [{ id, ts, type, message, powe
 ### `GET /api/forecast?months=1-12` (default 12)
 
 Returns `{ model, this_month: { month, projected_kwh, projected_bill, ac_kwh_est }, next_days: [{ date, weekday, condition, icon, temp_max_c, temp_min_c, temp_mean_c, rain_chance_pct, rain_mm, wind_max_kmh, humidity_pct, sunrise, sunset, predicted_kwh }] (14), outlook: { headline, decreasing: [{ item, detail }], increasing: [{ item, detail }], months: [{ month, year, days, season, forecast_temp_c, likely_range_c, avg_high_c, avg_low_c, rain_mm, rainy_days, normal_temp_c, vs_normal_c, trend_adjustment_c, weather_basis: forecast|mixed|normals, weather_source, sunset, daylight_h, predicted_kwh, ac_kwh_est, predicted_bill, predicted_slab, change_pct }] }, year: { summary, total_kwh, total_bill, cheapest_month, most_expensive_month, ac_season_returns, ac_peak_month, hottest_month, coldest_month, wettest_month, weather_basis: { seasonal_forecast, mostly_normals, warming_trend } } | null (when months <= 3), weather_share_label, suggestions: [{ type, message }], excludes_taxes: true }`. `400` bad months, `422` if fewer than 7 days of usage. `change_pct` is `null` when no usage is recorded for the current calendar month yet (nothing to compare against); the UI and the suggestion rules both handle that case.
+
+### `POST /api/chat` (logged-in user)
+
+- Body: `{ messages: [{ role: "user" | "assistant", text }] }`, last one from the user; max 20 messages, 2,000 chars each. Returns `{ reply, tools_used }`.
+- Gemini `generateContent` via plain `fetch` (no SDK), key in `x-goog-api-key`. Tools: `get_live_power`, `get_summary`, `get_usage_history`, `get_peak_hours`, `get_alerts`, `get_forecast` - they call the same `lib/` functions as the dashboard with the user's Supabase client (RLS). Up to 5 tool rounds per question; within a turn the model's content is sent back unchanged (Gemini 3 thought signatures).
+- 30 messages per user per hour (in memory, per server instance). `503` no key, `429` limit or Gemini quota, `502` other Gemini errors. Chat history lives in the browser (localStorage), no table.
+- System prompt rules: numbers only from tools, reply in the user's language (English / Urdu / Roman Urdu), energy charge only, never suggest opening the meter, stay on topic.
 
 All user-facing routes get the user from the Supabase session and return `401` if there is none. They only ever read the user's own device.
 
@@ -220,6 +244,7 @@ All user-facing routes get the user from the Supabase session and return `401` i
 2. Price it with `tariff_slabs`. Keep the pricing function in `lib/bill.js`; the mode is the single option `SLAB_MODE`: `single_rate` (all units at the rate of the slab the total falls in; unprotected, the default) or `tiered` (each slab at its own rate).
 3. Projection = month kWh ÷ days passed × days in month (days passed is fractional, in Karachi time).
 4. Slab warning when the projection crosses into a higher slab. At most once per slab per month.
+   Also a near-limit warning when the units used so far come within 10 of the slab's upper limit (90, 190, 290, …), saying how much the bill jumps at the next unit. At most once per slab per month (key: "Unit N moves you" in the message). Both use alert type `slab_warning` and the user's email-alerts setting.
 5. Energy charge only. Taxes, fuel adjustment and fixed charges are excluded, and the API response should say so (`excludes_taxes: true`).
 
 **Usage forecast (weather-based):**
@@ -230,6 +255,8 @@ All user-facing routes get the user from the Supabase session and return `401` i
 5. Headline and the down/up lists cover the next 3 months; `year` summarises all months (totals, cheapest/most expensive, when AC season returns and peaks). Outlook lists what goes down/up: AC (from `ac_kwh_est`), lighting (earlier/later sunset), heating (months below 17°C). Lighting and heating are described, not added to kWh: the model has no cold-day data to measure them.
 6. Suggestions are fixed if/then rules with templates (no LLM): rising/falling/steady usage, units per day to stay in a cheaper slab, hot/mild days ahead (daytime highs), likely thunderstorms, LED lighting, winter heating.
 7. The weather-driven part is an estimate, not measured AC use. Label it "weather-driven usage (est.)" in the API and UI.
+
+**High voltage:** after each insert, if any new reading has `voltage_v > 250` → alert type `voltage` ("High voltage: N V at time", advice to switch off sensitive appliances / use a stabilizer / report to FESCO), at most one per device per 30 minutes, emailed like the others. Pakistani mains is nominally 230 V.
 
 **Alerts:** insert into `alerts`, then email via Resend if `user_settings.email_alerts` is on. Set `emailed = true` on success. Email failure is logged, never thrown. Without a verified domain, `onboarding@resend.dev` only delivers to the Resend account's own email (inovixco@gmail.com). The slab warning check is throttled to once per 10 minutes per device; "once per slab per month" is enforced by the slab name in the alert message.
 
@@ -267,5 +294,5 @@ All user-facing routes get the user from the Supabase session and return `401` i
 
 - I'm new to Next.js. When you add or change a route, explain in a line or two what it does and how to test it in Postman.
 - We're on a ~36-hour clock. Build the weather forecast only after ingestion, stats, anomaly and bill all work.
-- `POST /api/readings` is live on Vercel. Until the hardware is ready, `npm run fake-device` (in `energy-monitor/`) stands in for the ESP32; use `-- --watts 2500` to simulate a spike. Real ESP32 integration happens last: keep 4–5 hours for it.
+- `POST /api/readings` is live on Vercel. Until the hardware is ready, `npm run fake-device` (in `energy-monitor/`) stands in for the ESP32; use `-- --watts 2500` to simulate a spike and `-- --volts 262` for high voltage. Real ESP32 integration happens last: keep 4–5 hours for it.
 - Ask before adding a new dependency or a new table.

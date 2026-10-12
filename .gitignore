@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ESP32 Wi-Fi password and device secret
+firmware/**/secrets.h

@@ -3,6 +3,7 @@ import { verifyDevice } from "@/lib/deviceAuth";
 import { parseReadings } from "@/lib/readings";
 import { checkSlab } from "@/lib/slabWarning";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { checkVoltage } from "@/lib/voltage";
 
 // POST /api/readings - called by the ESP32 every 10 s.
 // Headers: x-device-key (required), x-device-id (optional if device_id is in the body).
@@ -28,7 +29,14 @@ export async function POST(request) {
   if (skipped) console.warn(`readings: skipped ${skipped} of ${skipped + rows.length} (${firstSkipReason})`);
 
   if (rows.length > 0) {
-    const { error: insertError } = await supabaseAdmin.from("readings").insert(rows);
+    let { error: insertError } = await supabaseAdmin.from("readings").insert(rows);
+    // Database not migrated yet (supabase/voltage.sql): keep the energy data, drop voltage.
+    if (insertError && insertError.message.includes("voltage_v")) {
+      console.warn("readings: voltage_v column missing, run supabase/voltage.sql; storing without voltage");
+      ({ error: insertError } = await supabaseAdmin
+        .from("readings")
+        .insert(rows.map(({ voltage_v, ...rest }) => rest)));
+    }
     if (insertError) {
       console.error("readings insert failed:", insertError.message);
       return Response.json({ error: "insert failed" }, { status: 500 });
@@ -48,6 +56,12 @@ export async function POST(request) {
       if (result.warned) console.log("slab warning:", result.message);
     } catch (err) {
       console.error("slab check failed:", err);
+    }
+    try {
+      const result = await checkVoltage(deviceId, rows);
+      if (result.alerted) console.log("voltage alert:", result.message);
+    } catch (err) {
+      console.error("voltage check failed:", err);
     }
   }
 

@@ -2,6 +2,7 @@
 // Usage:
 //   npm run fake-device                          -> localhost, ~300 W
 //   npm run fake-device -- --watts 1500          -> simulate a heater
+//   npm run fake-device -- --volts 262           -> simulate high mains voltage (alert above 250 V)
 //   npm run fake-device -- --url https://<app>.vercel.app --once
 // Needs DEVICE_ID and DEVICE_SECRET in .env.local.
 const VOLTAGE = 230;
@@ -14,6 +15,7 @@ function arg(name, fallback) {
 
 const url = (arg("url", "http://localhost:3000")).replace(/\/$/, "") + "/api/readings";
 const watts = Number(arg("watts", 300));
+const volts = Number(arg("volts", VOLTAGE));
 const once = process.argv.includes("--once");
 const { DEVICE_ID, DEVICE_SECRET } = process.env;
 
@@ -28,6 +30,7 @@ async function send() {
     device_id: DEVICE_ID,
     ts: new Date().toISOString(),
     current_a: +(power_w / VOLTAGE).toFixed(3),
+    voltage_v: +(volts + (Math.random() - 0.5) * 2).toFixed(1), // +-1 V noise
     power_w: +power_w.toFixed(1),
     energy_wh: +((power_w * INTERVAL_S) / 3600).toFixed(4),
   };

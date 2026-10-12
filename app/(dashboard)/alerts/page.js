@@ -12,6 +12,7 @@ const FILTERS = [
   { value: "all", label: "All" },
   { value: "anomaly", label: "Unusual usage" },
   { value: "slab_warning", label: "Slab warnings" },
+  { value: "voltage", label: "High voltage" },
 ];
 
 // Settings panel (dashboard-design.md §7.1): the wall switch + alert email,
@@ -107,7 +108,7 @@ export default function AlertsPage() {
 
   return (
     <>
-      <PageHeader title="Alerts" subtitle="Unusual spikes and tariff-slab warnings, newest first">
+      <PageHeader title="Alerts" subtitle="Unusual spikes, high voltage and tariff-slab warnings, newest first">
         <Tabs options={FILTERS} value={filter} onChange={setFilter} />
       </PageHeader>
       <ErrorNote message={alerts.error} onRetry={alerts.reload} />
@@ -117,7 +118,7 @@ export default function AlertsPage() {
       <div className="mt-6 grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <p className="mb-3 font-bill text-[11px] uppercase tracking-wide text-ink-soft">
-            {list.length} alert{list.length === 1 ? "" : "s"} · {counts.anomaly ?? 0} unusual usage · {counts.slab_warning ?? 0} slab warnings · updates every 20s
+            {list.length} alert{list.length === 1 ? "" : "s"} · {counts.anomaly ?? 0} unusual usage · {counts.slab_warning ?? 0} slab warnings · {counts.voltage ?? 0} high voltage · updates every 20s
           </p>
           {!alerts.data ? (
             <div className="space-y-3">

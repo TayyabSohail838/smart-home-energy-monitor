@@ -23,6 +23,7 @@ create table if not exists public.readings (
   current_a real not null check (current_a >= 0),
   power_w real not null check (power_w >= 0),
   energy_wh real not null check (energy_wh >= 0),  -- energy in this 10 s window
+  voltage_v real check (voltage_v is null or (voltage_v >= 0 and voltage_v <= 500)),  -- mains V (PZEM); null on old rows
   is_seeded boolean not null default false
 );
 
@@ -32,7 +33,7 @@ create table if not exists public.alerts (
   id bigint generated always as identity primary key,
   device_id uuid not null references public.devices on delete cascade,
   ts timestamptz not null default now(),
-  type text not null check (type in ('anomaly', 'slab_warning')),
+  type text not null check (type in ('anomaly', 'slab_warning', 'voltage')),
   message text,
   power_w real,
   emailed boolean not null default false

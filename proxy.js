@@ -47,7 +47,9 @@ export async function proxy(request) {
   // Pages need a login; API routes answer 401 themselves.
   const isApi = pathname.startsWith("/api/");
   const isLogin = pathname === "/login";
-  if (!isApi && !user && !isLogin) return redirectKeepingCookies(request, response, "/login");
+  // The reset link signs the user in on the page itself (code in the URL), so let it through.
+  const isReset = pathname === "/reset-password";
+  if (!isApi && !user && !isLogin && !isReset) return redirectKeepingCookies(request, response, "/login");
   if (!isApi && user && isLogin) return redirectKeepingCookies(request, response, "/dashboard");
 
   return response;
