@@ -55,11 +55,13 @@ export function Skeleton({ className = "h-6 w-full" }) {
   return <span className={`skeleton block ${className}`} />;
 }
 
-// Segmented control: options = [{ value, label }]
+// Segmented control: options = [{ value, label }]. Paper idiom (ink border,
+// mono uppercase labels, active segment inverted) to match the rest of the
+// reskinned dashboard instead of the old glass pill.
 export function Tabs({ options, value, onChange, size = "md" }) {
   return (
-    <div className="inline-flex rounded-full bg-white/60 p-1 ring-1 ring-black/5" role="tablist">
-      {options.map((o) => {
+    <div className="inline-flex overflow-hidden rounded-sm border border-ink/30" role="tablist">
+      {options.map((o, i) => {
         const active = o.value === value;
         return (
           <button
@@ -67,9 +69,9 @@ export function Tabs({ options, value, onChange, size = "md" }) {
             role="tab"
             aria-selected={active}
             onClick={() => onChange(o.value)}
-            className={`rounded-full transition-all duration-200 ${size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-sm"} ${
-              active ? "bg-ink text-white shadow-sm" : "text-ink-2 hover:bg-white hover:text-ink"
-            }`}
+            className={`font-bill uppercase tracking-wide transition-colors duration-150 ${
+              size === "sm" ? "px-2.5 py-1 text-[10px]" : "px-3.5 py-1.5 text-[11px]"
+            } ${i > 0 ? "border-l border-ink/30" : ""} ${active ? "bg-ink text-paper" : "text-ink-soft hover:text-ink"}`}
           >
             {o.label}
           </button>

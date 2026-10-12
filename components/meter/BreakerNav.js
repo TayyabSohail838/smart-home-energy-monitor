@@ -49,10 +49,13 @@ function useSpikeCount() {
   return data.alerts.filter((a) => a.type === "anomaly" && Date.parse(a.ts) >= start.getTime()).length;
 }
 
-// One breaker: a handle (up + lit = on/active) beside an icon + label.
-function Breaker({ href, label, icon, active, badge, danger, onClick, compact, delay = 0, horizontal }) {
+// One breaker: a handle (up + lit = on/active) beside an icon + label. When
+// its label is hidden (icon-only tablet width, or the sidebar manually
+// collapsed), a hover tooltip stands in for it.
+function Breaker({ href, label, icon, active, badge, danger, onClick, compact, delay = 0, horizontal, collapsed }) {
   const lit = active;
   const Tag = href ? Link : "button";
+  const canHideLabel = compact && !horizontal;
   return (
     <Tag
       href={href}
@@ -82,7 +85,7 @@ function Breaker({ href, label, icon, active, badge, danger, onClick, compact, d
         <Svg name={icon} className={`h-4 w-4 shrink-0 ${lit ? (danger ? "text-lamp-red" : "text-breaker-on") : "text-white/45"}`} />
         <span
           className={`truncate font-bill uppercase tracking-wide ${horizontal ? "text-[9px]" : "text-[11px]"} ${
-            compact ? "lg:hidden" : ""
+            collapsed ? "hidden" : compact ? "hidden lg:inline" : ""
           } ${lit ? "text-paper" : "text-white/50"}`}
         >
           {label}
@@ -97,6 +100,17 @@ function Breaker({ href, label, icon, active, badge, danger, onClick, compact, d
       {badge > 0 && horizontal && (
         <span className="absolute right-2 top-1 h-1.5 w-1.5 rounded-full bg-lamp-red" aria-label={`${badge} new`} />
       )}
+
+      {canHideLabel && (
+        <span
+          role="tooltip"
+          className={`pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-x-1 -translate-y-1/2 whitespace-nowrap rounded-md bg-breaker-body px-2 py-1 font-bill text-[10px] uppercase tracking-wide text-paper opacity-0 shadow-xl ring-1 ring-white/10 transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 ${
+            collapsed ? "" : "lg:hidden"
+          }`}
+        >
+          {label}
+        </span>
+      )}
     </Tag>
   );
 }
@@ -109,28 +123,54 @@ function useLogout(router) {
   };
 }
 
-// Desktop (≥1024px: full labels) / tablet (768–1023px: icons + screw-dot panel).
-export function SidePanel({ user, device, router }) {
+// Desktop (≥1024px: full labels, collapsible to icons-only) / tablet
+// (768–1023px: icons + screw-dot panel, always collapsed).
+export function SidePanel({ user, device, router, collapsed, onToggleCollapse }) {
   const pathname = usePathname();
   const spikes = useSpikeCount();
   const logout = useLogout(router);
 
   return (
-    <aside className="relative hidden h-full w-20 shrink-0 flex-col rounded-md bg-breaker-body p-3 text-white md:flex lg:w-[188px]">
+    <aside
+      className={`relative hidden h-full shrink-0 flex-col rounded-md bg-breaker-body p-3 text-white transition-[width] duration-200 md:flex ${
+        collapsed ? "w-20" : "w-20 lg:w-[188px]"
+      }`}
+    >
       {/* corner screws */}
       <span className="absolute left-2 top-2 h-1.5 w-1.5 rounded-full bg-black/50" aria-hidden />
       <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-black/50 lg:block" aria-hidden />
       <span className="absolute bottom-2 left-2 h-1.5 w-1.5 rounded-full bg-black/50" aria-hidden />
       <span className="absolute bottom-2 right-2 h-1.5 w-1.5 rounded-full bg-black/50 lg:block" aria-hidden />
 
-      <div className="flex flex-col items-center gap-1 px-1 pt-1 lg:items-start">
+      {/* collapse/expand toggle: desktop only, no-op at the tablet width which is always icon-only */}
+      <button
+        onClick={onToggleCollapse}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        className="absolute -right-2.5 top-9 z-20 hidden h-5 w-5 items-center justify-center rounded-full bg-breaker-body text-white/70 ring-1 ring-white/15 transition-colors hover:text-white lg:flex"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className={`h-3 w-3 transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}
+          aria-hidden
+        >
+          <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      <div className={`flex flex-col items-center gap-1 px-1 pt-1 ${collapsed ? "" : "lg:items-start"}`}>
         <span className="font-display text-lg font-black uppercase leading-none text-paper">
-          <span className="lg:hidden">W</span>
-          <span className="hidden lg:inline">Wattly</span>
+          <span className={collapsed ? "" : "lg:hidden"}>W</span>
+          <span className={`hidden ${collapsed ? "" : "lg:inline"}`}>Wattly</span>
         </span>
         <span className="flex items-center gap-1.5">
           <span className="live-dot" />
-          <span className="hidden max-w-[120px] truncate font-bill text-[10px] text-white/50 lg:inline">{device?.name}</span>
+          <span className={`hidden max-w-[120px] truncate font-bill text-[10px] text-white/50 ${collapsed ? "" : "lg:inline"}`}>
+            {device?.name}
+          </span>
         </span>
       </div>
 
@@ -146,21 +186,24 @@ export function SidePanel({ user, device, router }) {
             active={pathname.startsWith(item.href)}
             badge={item.href === "/alerts" ? spikes : 0}
             compact
+            collapsed={collapsed}
             delay={i * 40}
           />
         ))}
       </nav>
 
       <div className="mt-auto flex flex-col gap-1 border-t border-dashed border-white/15 pt-3">
-        <Breaker href="/alerts#settings" label="Settings" icon="settings" active={false} compact />
-        <Breaker label="Log out" icon="logout" active={true} danger onClick={logout} compact />
+        <Breaker href="/alerts#settings" label="Settings" icon="settings" active={false} compact collapsed={collapsed} />
+        <Breaker label="Log out" icon="logout" active={true} danger onClick={logout} compact collapsed={collapsed} />
       </div>
 
-      <div className="mt-3 flex items-center gap-2 border-t border-dashed border-white/15 pt-3">
+      <div className={`mt-3 flex items-center gap-2 border-t border-dashed border-white/15 pt-3 ${collapsed ? "justify-center" : ""}`}>
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/10 font-bill text-[11px] text-white/70">
           {user?.email?.[0]?.toUpperCase() ?? "·"}
         </span>
-        <span className="hidden min-w-0 flex-1 truncate font-bill text-[10px] text-white/50 lg:inline">{user?.email}</span>
+        <span className={`hidden min-w-0 flex-1 truncate font-bill text-[10px] text-white/50 ${collapsed ? "" : "lg:inline"}`}>
+          {user?.email}
+        </span>
       </div>
     </aside>
   );

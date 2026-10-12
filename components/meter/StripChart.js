@@ -1,6 +1,6 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fmtDay, fmtNum, fmtWeekdayDay, hourLabel } from "@/lib/format";
 
 // Short label for axis ticks (hour unit) / table-column date (day unit).
@@ -31,24 +31,15 @@ function StripTooltip({ active, payload, unit, rate }) {
 }
 
 // Paper-roll strip chart (dashboard-design.md §5.1): sprocket holes top and
-// bottom, ink bars with a blue top cap. The cap is a fixed share of the
-// tallest bar rather than a fixed pixel height - Recharts stacks by value,
-// not pixels - so it reads as a consistent strip across every bar instead of
-// scaling with each bar's own height.
+// bottom, a blue pen trace of kWh per bucket. Gaps (kwh == null, e.g. hours
+// later today that haven't happened yet) break the line rather than
+// connecting across them.
 export default function StripChart({ points, unit, rate, height = 260 }) {
-  const maxKwh = Math.max(0, ...points.map((p) => p.kwh ?? 0));
-  const cap = maxKwh * 0.035;
-  const data = points.map((p) => ({
-    ...p,
-    body: p.kwh == null ? null : Math.max(0, p.kwh - cap),
-    cap: p.kwh == null ? null : Math.min(p.kwh, cap),
-  }));
-
   return (
     <div className="rounded-md bg-paper-dark py-2">
       <SprocketRow />
       <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} margin={{ top: 8, right: 12, left: -8, bottom: 0 }} barCategoryGap="22%">
+        <LineChart data={points} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke="var(--rule)" strokeOpacity={0.5} />
           <XAxis
             dataKey="bucket"
@@ -60,10 +51,18 @@ export default function StripChart({ points, unit, rate, height = 260 }) {
             minTickGap={14}
           />
           <YAxis tick={{ fill: "var(--ink-soft)", fontSize: 10 }} tickLine={false} axisLine={false} width={34} />
-          <Tooltip cursor={{ fill: "rgba(27,26,23,0.05)" }} content={<StripTooltip unit={unit} rate={rate} />} />
-          <Bar dataKey="body" stackId="u" fill="var(--ink)" animationDuration={500} />
-          <Bar dataKey="cap" stackId="u" fill="var(--usage-blue)" radius={[2, 2, 0, 0]} animationDuration={500} />
-        </BarChart>
+          <Tooltip cursor={{ stroke: "var(--ink)", strokeWidth: 1, strokeDasharray: "3 3" }} content={<StripTooltip unit={unit} rate={rate} />} />
+          <Line
+            type="monotone"
+            dataKey="kwh"
+            stroke="var(--ink)"
+            strokeWidth={2.5}
+            dot={{ r: 2.5, fill: "var(--ink)", strokeWidth: 0 }}
+            activeDot={{ r: 5 }}
+            connectNulls={false}
+            animationDuration={500}
+          />
+        </LineChart>
       </ResponsiveContainer>
       <SprocketRow />
     </div>
