@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import AlertBanner from "@/components/AlertBanner";
+import AiSuggestions from "@/components/meter/AiSuggestions";
 import AlertTicker from "@/components/meter/AlertTicker";
 import BillSlip from "@/components/meter/BillSlip";
 import GridScene from "@/components/meter/GridScene";
@@ -85,6 +86,7 @@ export default function OverviewPage() {
             spikesToday={spikesToday}
             weatherDay={forecast.data?.next_days?.[0]}
           />
+          <AiSuggestions />
         </div>
       </div>
 
