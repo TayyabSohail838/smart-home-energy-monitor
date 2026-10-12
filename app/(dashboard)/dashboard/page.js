@@ -6,6 +6,7 @@ import AlertBanner from "@/components/AlertBanner";
 import AlertTicker from "@/components/meter/AlertTicker";
 import BillSlip from "@/components/meter/BillSlip";
 import Monitor from "@/components/meter/Monitor";
+import { Panel } from "@/components/meter/Panel";
 import Readouts from "@/components/meter/Readouts";
 import SlabDial from "@/components/meter/SlabDial";
 import StatusLights from "@/components/meter/StatusLights";
@@ -28,21 +29,6 @@ function greeting(nowMs) {
   const hour = d.getUTCHours();
   const phase = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : hour < 21 ? "Good evening" : "Good night";
   return `${phase} · ${WEEKDAY[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH[d.getUTCMonth()]}`;
-}
-
-// A small bordered panel for content below the §4 layout proper (today-by-hour,
-// peak hours, next days) - kept from the pre-reskin page rather than dropped,
-// just restyled to the paper surface instead of a glass Card.
-function Panel({ title, action, children }) {
-  return (
-    <div className="rounded-md border border-ink/15 p-4">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <p className="font-bill text-[11px] uppercase tracking-wide text-ink-soft">{title}</p>
-        {action}
-      </div>
-      {children}
-    </div>
-  );
 }
 
 export default function OverviewPage() {

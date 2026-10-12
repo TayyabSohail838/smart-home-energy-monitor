@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import PeakClock from "@/components/meter/PeakClock";
+import { Panel } from "@/components/meter/Panel";
 import StripChart, { rowLabel } from "@/components/meter/StripChart";
 import PageHeader from "@/components/PageHeader";
-import { Card, ErrorNote, Skeleton, Tabs } from "@/components/ui";
+import { ErrorNote, Skeleton, Tabs } from "@/components/ui";
 import { fmtNum, hourLabel } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
@@ -110,27 +111,27 @@ export default function UsagePage() {
       )}
 
       <div className="mt-6 grid gap-5 lg:grid-cols-3">
-        <Card delay={0} className="lg:col-span-2" title="Peak hours" subtitle="Average power for each hour of the day · last 14 days">
+        <Panel className="lg:col-span-2" title="Peak hours · last 14 days">
           {peak.data ? (
             <PeakClock hours={peak.data.hours} topHours={peak.data.top_hours} message={peak.data.message} />
           ) : (
             <Skeleton className="h-[260px] w-full" />
           )}
-        </Card>
+        </Panel>
 
-        <Card delay={40} title="What this means">
+        <Panel title="What this means">
           {peak.data ? (
             <>
-              <p className="text-sm leading-relaxed text-ink-2">{peak.data.message}</p>
-              <ul className="mt-4 space-y-2 text-sm text-ink-2">
+              <p className="text-sm leading-relaxed text-ink-soft">{peak.data.message}</p>
+              <ul className="mt-4 space-y-2">
                 {[...peak.data.hours]
                   .filter((x) => x.samples > 0)
                   .sort((a, b) => b.avg_power_w - a.avg_power_w)
                   .slice(0, 3)
                   .map((x, i) => (
-                    <li key={x.hour} className="flex items-center justify-between rounded-2xl bg-white/70 px-3 py-2 ring-1 ring-black/5">
-                      <span>#{i + 1} · {hourLabel(x.hour)}</span>
-                      <span className="font-medium tabular-nums text-ink">{fmtNum(x.avg_power_w)} W</span>
+                    <li key={x.hour} className="flex items-center justify-between rounded-sm bg-paper-dark px-3 py-2 font-bill text-[11px]">
+                      <span className="text-ink-soft">#{i + 1} · {hourLabel(x.hour)}</span>
+                      <span className="tabular-nums text-ink">{fmtNum(x.avg_power_w)} W</span>
                     </li>
                   ))}
               </ul>
@@ -138,7 +139,7 @@ export default function UsagePage() {
           ) : (
             <Skeleton className="h-40 w-full" />
           )}
-        </Card>
+        </Panel>
       </div>
     </>
   );

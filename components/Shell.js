@@ -8,11 +8,14 @@ import { getSupabase } from "@/lib/supabase/client";
 const DeviceContext = createContext(null);
 export const useDevice = () => useContext(DeviceContext);
 
+const SIDEBAR_COLLAPSED_KEY = "wattly-sidebar-collapsed";
+
 // Dashboard frame: loads the user and their device once and shares them, then
 // wraps every page in the breaker-panel nav (dashboard-design.md §3).
 export default function Shell({ children }) {
   const router = useRouter();
   const [state, setState] = useState({ user: null, device: null, ready: false });
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -26,11 +29,28 @@ export default function Shell({ children }) {
     })();
   }, [router]);
 
+  // Per-browser preference only; never shared, so plain localStorage is fine.
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+    } catch {}
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  };
+
   return (
     <DeviceContext.Provider value={state}>
       <div className="mx-auto flex min-h-screen max-w-[1400px] gap-4 p-3 pb-20 sm:p-5 md:pb-5">
         <div className="sticky top-5 hidden h-[calc(100vh-2.5rem)] md:block">
-          <SidePanel user={state.user} device={state.device} router={router} />
+          <SidePanel user={state.user} device={state.device} router={router} collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
         </div>
 
         <main className="min-w-0 flex-1">
