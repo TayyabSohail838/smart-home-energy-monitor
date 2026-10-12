@@ -329,7 +329,7 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
                 strokeWidth={2}
                 fill="url(#traceFill)"
                 isAnimationActive={false}
-                connectNulls={false}
+                connectNulls
                 dot={false}
                 activeDot={{ r: 3, fill: "var(--trace)", stroke: "var(--screen)" }}
               />
