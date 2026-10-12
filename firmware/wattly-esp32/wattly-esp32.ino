@@ -34,7 +34,10 @@
 const float TEST_MIN_W = 30, TEST_MAX_W = 65;    // like a laptop charging
 const float TEST_MIN_V = 225, TEST_MAX_V = 235;  // normal Pakistani mains
 
-const uint32_t LAPTOP_FRESH_MS = 25000;          // a laptop reading counts for 25 s
+const uint32_t LAPTOP_FRESH_MS = 15000;          // a laptop reading counts for 15 s
+const uint32_t LAPTOP_INTERVAL_MS = 5000;        // laptop mode: a reading every 5 s
+const uint32_t JUMP_MIN_GAP_MS = 2000;           // ...or sooner (>= 2 s) when the watts jump
+const float JUMP_W = 3, JUMP_SHARE = 0.15;       // a "jump": >= 3 W and >= 15% change
 const float LAPTOP_VOLTS = 230;                  // only to turn watts into amps for current_a
 
 const uint32_t INTERVAL_MS = 10000;
@@ -53,6 +56,7 @@ int backlogCount = 0;
 uint32_t lastReadMs = 0;
 float laptopWatts = NAN;
 uint32_t laptopAtMs = 0;
+float lastSentW = NAN;
 String serialLine;
 
 // Reads "W 10.6" lines from the laptop script over USB.
@@ -161,7 +165,11 @@ void loop() {
   readLaptop();
 
   uint32_t now = millis();
-  if (now - lastReadMs >= INTERVAL_MS || lastReadMs == 0) {
+  bool laptopFresh = !isnan(laptopWatts) && now - laptopAtMs < LAPTOP_FRESH_MS;
+  uint32_t interval = laptopFresh ? LAPTOP_INTERVAL_MS : INTERVAL_MS;
+  float change = isnan(lastSentW) ? 0 : fabsf(laptopWatts - lastSentW);
+  bool jump = laptopFresh && change >= JUMP_W && change >= JUMP_SHARE * lastSentW;
+  if (now - lastReadMs >= interval || (jump && now - lastReadMs >= JUMP_MIN_GAP_MS) || lastReadMs == 0) {
     float elapsedS = lastReadMs == 0 ? INTERVAL_MS / 1000.0 : (now - lastReadMs) / 1000.0;
     lastReadMs = now;
 
@@ -202,6 +210,7 @@ void loop() {
                       r.voltage_v, r.current_a, r.power_w, r.energy_wh);
       }
       addToBacklog(r);
+      lastSentW = r.power_w;
     }
     // Catch up a few batches per cycle after an outage.
     for (int i = 0; i < 3 && sendBacklog(); i++) {}

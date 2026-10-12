@@ -1,11 +1,12 @@
-# Sends this laptop's real power use to the ESP32 over USB every 10 s; the ESP32 posts it
+# Sends this laptop's real power use to the ESP32 over USB every 2 s (it posts every 5 s,
+# or at once when the watts jump); the ESP32 posts it
 # to /api/readings over its own Wi-Fi (firmware/wattly-esp32, "LAPTOP" readings).
 # A safe live demo load: the battery sensor measures it, so the charger must be unplugged.
 #
 # Usage (from energy-monitor/, ESP32 plugged in, Arduino Serial Monitor closed):
 #   powershell -ExecutionPolicy Bypass -File scripts/laptop-meter.ps1            # auto-finds the port
 #   powershell -ExecutionPolicy Bypass -File scripts/laptop-meter.ps1 -Port COM3
-param([string]$Port = "", [int]$Seconds = 10)
+param([string]$Port = "", [int]$Seconds = 2)
 
 if (-not $Port) {
   $dev = Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -match '\((COM\d+)\)' } | Select-Object -First 1

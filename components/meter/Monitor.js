@@ -151,7 +151,8 @@ function Filters({ value, onChange }) {
 
 export default function Monitor({ deviceId, alerts, onReading, onStats }) {
   const router = useRouter();
-  const [range, setRange] = useState("24h");
+  // 1 HR by default: 10-second points, so a change shows at once (24 HRS averages 5 min).
+  const [range, setRange] = useState("1h");
   const [points, setPoints] = useState([]);
   const [peak, setPeak] = useState(null);
   const [latest, setLatest] = useState(null);
