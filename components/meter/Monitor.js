@@ -157,6 +157,8 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
   const [peak, setPeak] = useState(null);
   const [latest, setLatest] = useState(null);
   const [source, setSource] = useState(null);
+  const [fetchedTs, setFetchedTs] = useState(null); // newest reading's real ts, from the API
+  const [tick, setTick] = useState(0);
   const [status, setStatus] = useState("connecting");
   const [loading, setLoading] = useState(true);
   const bucketsRef = useRef(new Map());
@@ -176,6 +178,12 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
     onStatsRef.current = onStats;
   }, [onStats]);
 
+  // Reload every 30 s as well, so the chart and DEVICE lamp recover if Realtime drops.
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   // Fresh load whenever the filter changes. The previous range's points stay
   // on screen until this resolves (same "keep old data" rule as useApi.js),
   // so switching filters doesn't flash NO SIGNAL for a moment.
@@ -194,19 +202,17 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
         setPoints(body.points ?? []);
         setPeak(body.peak ?? null);
         setSource(body.latest_source ?? null);
+        setFetchedTs(body.latest_ts ?? null);
         setLoading(false);
       } catch {
-        if (!cancelled) {
-          setPoints([]);
-          setPeak(null);
-          setLoading(false);
-        }
+        // Keep what's on screen; the next reload or Realtime row fills it in.
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [cfg.api, cfg.bucketMs]);
+  }, [cfg.api, cfg.bucketMs, tick]);
 
   // One subscription for the component's life; the handler always reads the
   // current filter through cfgRef so switching filters doesn't resubscribe.
@@ -262,8 +268,10 @@ export default function Monitor({ deviceId, alerts, onReading, onStats }) {
   const measured = chartData.filter((d) => d.y != null); // gap markers carry y = null
   const avgDisplay = measured.length ? measured.reduce((s, d) => s + d.y, 0) / measured.length : null;
   const nowW = latest?.power_w ?? chartData.at(-1)?.y ?? null;
-  const lastReadingTs = latest?.ts ?? chartData.at(-1)?.ts ?? null;
-  const live = Boolean(latest && now && now - Date.parse(latest.ts) < STALE_MS);
+  // Newest of the Realtime row and the API's latest_ts (a bucket start can be minutes old).
+  const lastReadingTs =
+    [latest?.ts, fetchedTs].filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+  const live = Boolean(lastReadingTs && now && now - Date.parse(lastReadingTs) < STALE_MS);
 
   // Lifted to the Overview page: Readouts sits under both the monitor and the
   // status lights column, and the DEVICE lamp needs the last reading time
