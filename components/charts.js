@@ -24,12 +24,14 @@ function yTick(max) {
   return (v) => (v >= 1000 ? `${fmtNum(v / 1000, 1)}k` : fmtNum(v, max < 1 ? 2 : max < 10 ? 1 : 0));
 }
 
+// Paper-styled tooltip (matches StripChart's StripTooltip) for the forecast
+// page's charts - the only callers of this component.
 function TooltipBox({ title, rows }) {
   return (
-    <div className="glass-strong rounded-2xl px-3 py-2 text-xs">
+    <div className="rounded-sm border border-ink bg-paper-dark px-3 py-2 font-bill text-xs text-ink shadow-md">
       <p className="mb-1 font-medium text-ink">{title}</p>
       {rows.map((r) => (
-        <p key={r.label} className="flex items-center gap-2 text-ink-2">
+        <p key={r.label} className="flex items-center gap-2 text-ink-soft">
           {r.color && <span className="h-2 w-2 rounded-full" style={{ background: r.color }} />}
           <span>{r.label}</span>
           <span className="ml-auto pl-3 font-medium tabular-nums text-ink">{r.value}</span>
@@ -41,7 +43,7 @@ function TooltipBox({ title, rows }) {
 
 function Legend({ items }) {
   return (
-    <div className="mb-2 flex flex-wrap gap-4 text-xs text-ink-2">
+    <div className="mb-2 flex flex-wrap gap-4 font-bill text-[11px] uppercase tracking-wide text-ink-soft">
       {items.map((i) => (
         <span key={i.label} className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: i.color }} />
