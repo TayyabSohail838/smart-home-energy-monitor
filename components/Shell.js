@@ -31,10 +31,14 @@ export default function Shell({ children }) {
   }, [router]);
 
   // Per-browser preference only; never shared, so plain localStorage is fine.
+  // Read after mount (deferred a tick) so the server and first client render match.
   useEffect(() => {
-    try {
-      setCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
-    } catch {}
+    const t = setTimeout(() => {
+      try {
+        setCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+      } catch {}
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   const toggleCollapsed = () => {
